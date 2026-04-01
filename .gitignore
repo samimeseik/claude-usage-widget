@@ -1,0 +1,18 @@
+# User config (contains org_id)
+config.json
+
+# Cache
+usage_cache.json
+.last_update_check
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Legacy files (not needed for distribution)
+fetch_usage.sh
+launch_widget.command
+
+# macOS
+.DS_Store
