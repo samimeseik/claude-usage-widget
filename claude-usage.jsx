@@ -100,6 +100,8 @@ export const render = function(props) {
   var sp = Math.round(fh.utilization || 0);
   var wp = Math.round(sd.utilization || 0);
   var snp = sn ? Math.round(sn.utilization || 0) : 0;
+  var trends = data && data._trends || {};
+  var tArrow = { up: ' ↑', down: ' ↓', stable: '' };
 
   var dotColor = errorMsg ? '#ff453a' : isStale ? '#ff9f0a' : '#30d158';
   var dotShadow = errorMsg ? '0 0 6px rgba(255,69,58,0.5)' : isStale ? '0 0 6px rgba(255,159,10,0.5)' : '0 0 6px rgba(48,209,88,0.5)';
@@ -134,7 +136,7 @@ export const render = function(props) {
           <div style={s.card}>
             <div style={s.lbl}>Current Session</div>
             <div style={s.row}>
-              <span style={pctStyle(barColor(sp) || '#0a84ff')}>{sp}%</span>
+              <span style={pctStyle(barColor(sp) || '#0a84ff')}>{sp}%{tArrow[trends.five_hour] || ''}</span>
               <span style={s.rst}>resets in {timeUntilReset(fh.resets_at)}</span>
             </div>
             <div style={s.bg}>
@@ -145,7 +147,7 @@ export const render = function(props) {
           <div style={s.card}>
             <div style={s.lbl}>Weekly — All Models</div>
             <div style={s.row}>
-              <span style={pctStyle(barColor(wp) || '#bf5af2')}>{wp}%</span>
+              <span style={pctStyle(barColor(wp) || '#bf5af2')}>{wp}%{tArrow[trends.seven_day] || ''}</span>
               <span style={s.rst}>resets in {timeUntilReset(sd.resets_at)}</span>
             </div>
             <div style={s.bg}>

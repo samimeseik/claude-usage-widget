@@ -1,9 +1,11 @@
 # User config (contains org_id)
 config.json
 
-# Cache
+# Cache & state
 usage_cache.json
+usage_history.json
 .last_update_check
+.last_notified
 
 # Python
 __pycache__/
