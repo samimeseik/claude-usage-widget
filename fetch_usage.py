@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
@@ -357,17 +357,83 @@ def get_trend(data):
     except Exception:
         return {}
 
+def load_history():
+    try:
+        with open(HISTORY_FILE, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def compute_eta(data, history):
+    """Calculate ETA when each metric reaches 100% based on recent burn rate.
+
+    Returns ISO timestamps for {five_hour, seven_day} only when:
+      - We have at least 30 minutes of data
+      - The rate is meaningfully positive (>0.5%/hour)
+      - The ETA falls BEFORE the natural reset (otherwise meaningless)
+    """
+    if len(history) < 3:
+        return {}
+    recent = history[-6:]  # last ~3 hours of 30-min samples
+    eta = {}
+    now = time.time()
+    for key, hkey in [("five_hour", "s"), ("seven_day", "w")]:
+        bucket = data.get(key) or {}
+        current = bucket.get("utilization", 0) or 0
+        if current >= 100:
+            continue
+        first = recent[0]
+        last = recent[-1]
+        time_diff_hours = (last.get("t", 0) - first.get("t", 0)) / 3600
+        if time_diff_hours < 0.5:
+            continue
+        pct_diff = last.get(hkey, 0) - first.get(hkey, 0)
+        rate = pct_diff / time_diff_hours
+        if rate <= 0.5:
+            continue
+        hours_to_full = (100 - current) / rate
+        eta_t = now + (hours_to_full * 3600)
+        # Only show ETA if it occurs before the natural reset
+        reset_iso = bucket.get("resets_at")
+        if reset_iso:
+            try:
+                reset_t = datetime.fromisoformat(reset_iso.replace("Z", "+00:00")).timestamp()
+                if eta_t >= reset_t:
+                    continue
+            except Exception:
+                pass
+        eta[key] = datetime.fromtimestamp(eta_t).isoformat()
+    return eta
+
+def get_sparkline(history, n=24):
+    """Return last N points for sparkline rendering."""
+    spark = {"s": [], "w": [], "sn": []}
+    for h in history[-n:]:
+        spark["s"].append(round(h.get("s", 0), 1))
+        spark["w"].append(round(h.get("w", 0), 1))
+        if "sn" in h:
+            spark["sn"].append(round(h.get("sn", 0), 1))
+    return spark
+
 # ─── Main: try all strategies in order ──────────────────────────────
+
+def enrich(data, method):
+    """Attach trends, ETA, sparkline + update banner to a successful fetch."""
+    data["_method"] = method
+    save_cache(data)
+    check_and_notify(data)
+    record_history(data)
+    history = load_history()
+    data["_trends"] = get_trend(data)
+    data["_eta"] = compute_eta(data, history)
+    data["_spark"] = get_sparkline(history)
+    return data
 
 def main():
     # Strategy 1: curl_cffi (fastest, most reliable)
     data, err1 = fetch_via_cookies()
     if data:
-        data["_method"] = "cookies"
-        save_cache(data)
-        check_and_notify(data)
-        record_history(data)
-        data["_trends"] = get_trend(data)
+        data = enrich(data, "cookies")
         update = check_for_update()
         if update:
             data["_update"] = update
@@ -377,22 +443,14 @@ def main():
     # Strategy 2a: AppleScript Chrome tab
     data, err2 = fetch_via_chrome_tab()
     if data:
-        data["_method"] = "chrome_tab"
-        save_cache(data)
-        check_and_notify(data)
-        record_history(data)
-        data["_trends"] = get_trend(data)
+        data = enrich(data, "chrome_tab")
         print(json.dumps(data))
         return
 
     # Strategy 2b: AppleScript Safari tab
     data, err3 = fetch_via_safari_tab()
     if data:
-        data["_method"] = "safari_tab"
-        save_cache(data)
-        check_and_notify(data)
-        record_history(data)
-        data["_trends"] = get_trend(data)
+        data = enrich(data, "safari_tab")
         print(json.dumps(data))
         return
 
@@ -401,6 +459,10 @@ def main():
     if cached:
         cached["_stale"] = True
         cached["_error"] = f"cookies: {err1} | chrome: {err2} | safari: {err3}"
+        history = load_history()
+        cached["_trends"] = get_trend(cached)
+        cached["_eta"] = compute_eta(cached, history)
+        cached["_spark"] = get_sparkline(history)
         print(json.dumps(cached))
         return
 

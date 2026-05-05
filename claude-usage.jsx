@@ -15,25 +15,61 @@ export const className = css`
   pointer-events: none;
 `;
 
-function timeUntilReset(resetIso) {
-  if (!resetIso) return '';
-  var diff = Math.max(0, new Date(resetIso) - new Date());
-  var h = Math.floor(diff / 3600000);
-  var m = Math.floor((diff % 3600000) / 60000);
-  if (h > 24) return Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
-  if (h > 0) return h + 'h ' + m + 'm';
-  return m + 'm';
+// ─── Time helpers ─────────────────────────────────────────────────
+
+function formatReset(iso) {
+  // Absolute, timezone-aware: "8:42 PM" / "Thu 8 PM" / "in 12m"
+  if (!iso) return '';
+  try {
+    var d = new Date(iso);
+    var now = new Date();
+    var diffMs = d - now;
+    var hours = diffMs / 3600000;
+    if (hours < 0) return 'now';
+    if (hours < 1) return 'in ' + Math.max(1, Math.floor(diffMs / 60000)) + 'm';
+    var sameDay = d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+    if (sameDay) {
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return d.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  } catch (e) { return ''; }
 }
+
+function formatEta(iso) {
+  // "ETA 8:42 PM" or "ETA Thu 3 PM"
+  if (!iso) return '';
+  try {
+    var d = new Date(iso);
+    var now = new Date();
+    var diffMs = d - now;
+    if (diffMs <= 0) return '';
+    var hours = diffMs / 3600000;
+    if (hours < 1) return 'in ' + Math.max(1, Math.floor(diffMs / 60000)) + 'm';
+    var sameDay = d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+    if (sameDay) {
+      return 'at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return d.toLocaleString('en-US', { weekday: 'short', hour: 'numeric' });
+  } catch (e) { return ''; }
+}
+
+function formatTs(ts) {
+  if (!ts) return '';
+  try {
+    return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+
+// ─── Color helpers ────────────────────────────────────────────────
 
 function barColor(pct) {
   if (pct >= 80) return '#ff453a';
   if (pct >= 60) return '#ff9f0a';
   return null;
 }
+function barGrad(pct, def) { return barColor(pct) || def; }
 
-function barGrad(pct, def) {
-  return barColor(pct) || def;
-}
+// ─── Styles ──────────────────────────────────────────────────────
 
 var s = {
   box: {
@@ -57,26 +93,48 @@ var s = {
   sub: { fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 },
   card: {
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12, padding: '10px 12px 8px 12px', marginBottom: 6,
+    borderRadius: 12, padding: '10px 12px 10px 12px', marginBottom: 6,
   },
   lbl: {
     fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.4)',
     textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 4,
   },
   row: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 },
-  rst: { fontSize: 9, color: 'rgba(255,255,255,0.28)' },
+  rst: { fontSize: 9, color: 'rgba(255,255,255,0.3)' },
   bg: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
+  metaRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 6, fontSize: 9,
+  },
+  eta: { color: 'rgba(255,255,255,0.45)', fontWeight: 500 },
+  etaWarn: { color: '#ff9f0a', fontWeight: 600 },
 };
 
-function formatTs(ts) {
-  if (!ts) return '';
-  try {
-    var d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  } catch(e) { return ''; }
+// ─── Sparkline ────────────────────────────────────────────────────
+
+function Sparkline(props) {
+  var pts = props.points || [];
+  if (pts.length < 2) return null;
+  var w = 70, h = 12;
+  var max = 100;
+  var step = w / (pts.length - 1);
+  var path = pts.map(function (p, i) {
+    var x = i * step;
+    var y = h - (Math.max(0, Math.min(p, max)) / max * h);
+    return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  return (
+    <svg width={w} height={h} style={{display: 'block', flexShrink: 0}}>
+      <path d={path} fill="none" stroke={props.color || 'rgba(255,255,255,0.5)'}
+            strokeWidth="1.2" strokeOpacity="0.7"
+            strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
-export const render = function(props) {
+// ─── Render ───────────────────────────────────────────────────────
+
+export const render = function (props) {
   var data = null, errorMsg = null, isStale = false;
 
   if (props.error || !props.output || !props.output.trim()) {
@@ -93,18 +151,24 @@ export const render = function(props) {
   var now = new Date();
   var timeStr = tsStr || now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-  var fh = data && data.five_hour || {};
-  var sd = data && data.seven_day || {};
-  var sn = data && data.seven_day_sonnet || null;
+  var fh = (data && data.five_hour) || {};
+  var sd = (data && data.seven_day) || {};
+  var sn = (data && data.seven_day_sonnet) || null;
+  var ex = (data && data.extra_usage) || null;
 
   var sp = Math.round(fh.utilization || 0);
   var wp = Math.round(sd.utilization || 0);
   var snp = sn ? Math.round(sn.utilization || 0) : 0;
-  var trends = data && data._trends || {};
+
+  var trends = (data && data._trends) || {};
+  var eta = (data && data._eta) || {};
+  var spark = (data && data._spark) || { s: [], w: [], sn: [] };
   var tArrow = { up: ' ↑', down: ' ↓', stable: '' };
 
   var dotColor = errorMsg ? '#ff453a' : isStale ? '#ff9f0a' : '#30d158';
-  var dotShadow = errorMsg ? '0 0 6px rgba(255,69,58,0.5)' : isStale ? '0 0 6px rgba(255,159,10,0.5)' : '0 0 6px rgba(48,209,88,0.5)';
+  var dotShadow = errorMsg
+    ? '0 0 6px rgba(255,69,58,0.5)'
+    : isStale ? '0 0 6px rgba(255,159,10,0.5)' : '0 0 6px rgba(48,209,88,0.5)';
   var dotStyle = {
     width: 6, height: 6, borderRadius: 3, flexShrink: 0,
     backgroundColor: dotColor, boxShadow: dotShadow,
@@ -133,37 +197,86 @@ export const render = function(props) {
         }}>{errorMsg}</div>
       ) : (
         <div>
+          {/* Current Session */}
           <div style={s.card}>
             <div style={s.lbl}>Current Session</div>
             <div style={s.row}>
               <span style={pctStyle(barColor(sp) || '#0a84ff')}>{sp}%{tArrow[trends.five_hour] || ''}</span>
-              <span style={s.rst}>resets in {timeUntilReset(fh.resets_at)}</span>
+              <span style={s.rst}>resets {formatReset(fh.resets_at)}</span>
             </div>
             <div style={s.bg}>
               <div style={{height:'100%', borderRadius:2, width: Math.max(sp,1)+'%', background: barGrad(sp, 'linear-gradient(90deg, #0a84ff, #5e5ce6)')}} />
             </div>
+            {(spark.s && spark.s.length > 1) || eta.five_hour ? (
+              <div style={s.metaRow}>
+                <Sparkline points={spark.s} color="#0a84ff" />
+                {eta.five_hour ? (
+                  <span style={s.etaWarn}>ETA {formatEta(eta.five_hour)}</span>
+                ) : (
+                  <span style={s.eta}>{spark.s && spark.s.length > 0 ? '12h trend' : ''}</span>
+                )}
+              </div>
+            ) : null}
           </div>
 
+          {/* Weekly — All Models */}
           <div style={s.card}>
             <div style={s.lbl}>Weekly — All Models</div>
             <div style={s.row}>
               <span style={pctStyle(barColor(wp) || '#bf5af2')}>{wp}%{tArrow[trends.seven_day] || ''}</span>
-              <span style={s.rst}>resets in {timeUntilReset(sd.resets_at)}</span>
+              <span style={s.rst}>resets {formatReset(sd.resets_at)}</span>
             </div>
             <div style={s.bg}>
               <div style={{height:'100%', borderRadius:2, width: Math.max(wp,1)+'%', background: barGrad(wp, 'linear-gradient(90deg, #bf5af2, #5e5ce6)')}} />
             </div>
+            {(spark.w && spark.w.length > 1) || eta.seven_day ? (
+              <div style={s.metaRow}>
+                <Sparkline points={spark.w} color="#bf5af2" />
+                {eta.seven_day ? (
+                  <span style={s.etaWarn}>ETA {formatEta(eta.seven_day)}</span>
+                ) : (
+                  <span style={s.eta}>{spark.w && spark.w.length > 0 ? '12h trend' : ''}</span>
+                )}
+              </div>
+            ) : null}
           </div>
 
+          {/* Weekly — Sonnet */}
           {sn ? (
             <div style={s.card}>
               <div style={s.lbl}>Weekly — Sonnet</div>
               <div style={s.row}>
                 <span style={pctStyle(barColor(snp) || '#30d158')}>{snp}%</span>
-                <span style={s.rst}>resets in {timeUntilReset(sn.resets_at)}</span>
+                <span style={s.rst}>resets {formatReset(sn.resets_at)}</span>
               </div>
               <div style={s.bg}>
                 <div style={{height:'100%', borderRadius:2, width: Math.max(snp,1)+'%', background: barGrad(snp, 'linear-gradient(90deg, #30d158, #34c759)')}} />
+              </div>
+              {spark.sn && spark.sn.length > 1 ? (
+                <div style={s.metaRow}>
+                  <Sparkline points={spark.sn} color="#30d158" />
+                  <span style={s.eta}>12h trend</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Extra Usage */}
+          {ex && ex.is_enabled ? (
+            <div style={s.card}>
+              <div style={s.lbl}>Extra Usage</div>
+              <div style={s.row}>
+                <span style={{fontSize: 18, fontWeight: 700, color: '#64d2ff', letterSpacing: '-0.5px', lineHeight: 1}}>
+                  ${(ex.used_credits || 0).toFixed(2)}
+                </span>
+                <span style={s.rst}>of ${ex.monthly_limit.toLocaleString()} {ex.currency || ''}</span>
+              </div>
+              <div style={s.bg}>
+                <div style={{
+                  height:'100%', borderRadius:2,
+                  width: Math.max(((ex.used_credits||0)/Math.max(ex.monthly_limit,1))*100, 0.5)+'%',
+                  background: 'linear-gradient(90deg, #64d2ff, #0a84ff)'
+                }} />
               </div>
             </div>
           ) : null}
