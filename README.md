@@ -2,11 +2,22 @@
 
 A macOS desktop widget that shows your Claude AI usage in real-time with notifications, trends, and multi-browser support.
 
+## Two widgets, separate concerns
+
+The widget ships as **two separate Übersicht widgets** that share the same backend. Place them on opposite sides of the screen — neither one ever runs off-screen.
+
+| Widget | Position | Shows |
+|--------|----------|-------|
+| `claude-usage.jsx` | bottom-left | Usage bars (Session, Weekly, Sonnet, Extra Usage), multi-account, sparklines, ETA |
+| `claude-code.jsx` | bottom-right | Claude Code dashboard: today, 7-day projects, year heatmap, hourly distribution, agents/skills leaderboard |
+
+You can enable either or both from Übersicht's menu bar icon.
+
 ## Features
 
 - **Live usage bars** — Session (5h), Weekly (7d), Sonnet with color-coded thresholds
 - **Multi-account** — Track all your Claude organizations in one widget (Personal + Work + API)
-- **Claude Code card** — Today's sessions, tokens, top tools, and most-used project (reads `~/.claude/projects/*.jsonl` directly — no extra fetches)
+- **Claude Code dashboard** — Today's tokens, 7-day project breakdown, year heatmap, hourly distribution, top agents/skills (reads `~/.claude/projects/*.jsonl` directly — no extra fetches)
 - **Sparkline trends** — Last 12 hours of usage drawn under each card
 - **ETA predictions** — "Reaches 100% at 8:42 PM" when burn rate is rising
 - **Absolute reset times** — "resets Thu 8 PM" instead of vague "1d 5h"

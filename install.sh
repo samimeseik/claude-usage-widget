@@ -220,12 +220,17 @@ cp "$SCRIPT_DIR/claude_usage_widget.py" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/fetch_usage.py"
 info "Scripts installed"
 
-# Copy Übersicht widget
+# Copy Übersicht widgets
 if $HAS_UBERSICHT; then
     mkdir -p "$WIDGET_DIR"
     cp "$SCRIPT_DIR/claude-usage.jsx" "$INSTALL_DIR/"
     cp "$INSTALL_DIR/claude-usage.jsx" "$WIDGET_DIR/"
-    info "Übersicht widget installed"
+    info "Übersicht widget installed: claude-usage (compact, bottom-left)"
+    if [ -f "$SCRIPT_DIR/claude-code.jsx" ]; then
+        cp "$SCRIPT_DIR/claude-code.jsx" "$INSTALL_DIR/"
+        cp "$INSTALL_DIR/claude-code.jsx" "$WIDGET_DIR/"
+        info "Übersicht widget installed: claude-code (dashboard, bottom-right)"
+    fi
 fi
 
 # ─── Step 5: Verify ───────────────────────────────────────────────

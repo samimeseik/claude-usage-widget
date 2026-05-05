@@ -1,5 +1,9 @@
 import { css } from "uebersicht";
 
+// Compact widget: usage bars only.
+// For the rich Claude Code dashboard (heatmap, projects, leaderboard),
+// enable claude-code.jsx separately.
+
 export const refreshFrequency = 120000;
 
 export const command = "python3 $HOME/.claude-widget/fetch_usage.py 2>/dev/null || cat /tmp/claude_usage_cache.json 2>/dev/null || echo '{\"error\":\"Run install.sh first\"}'";
@@ -18,7 +22,6 @@ export const className = css`
 // ─── Time helpers ─────────────────────────────────────────────────
 
 function formatReset(iso) {
-  // Absolute, timezone-aware: "8:42 PM" / "Thu 8 PM" / "in 12m"
   if (!iso) return '';
   try {
     var d = new Date(iso);
@@ -36,7 +39,6 @@ function formatReset(iso) {
 }
 
 function formatEta(iso) {
-  // "ETA 8:42 PM" or "ETA Thu 3 PM"
   if (!iso) return '';
   try {
     var d = new Date(iso);
@@ -67,16 +69,12 @@ function formatTokens(n) {
   return String(n);
 }
 
-// ─── Color helpers ────────────────────────────────────────────────
-
 function barColor(pct) {
   if (pct >= 80) return '#ff453a';
   if (pct >= 60) return '#ff9f0a';
   return null;
 }
 function barGrad(pct, def) { return barColor(pct) || def; }
-
-// ─── Styles ──────────────────────────────────────────────────────
 
 var s = {
   box: {
@@ -115,41 +113,9 @@ var s = {
   },
   eta: { color: 'rgba(255,255,255,0.45)', fontWeight: 500 },
   etaWarn: { color: '#ff9f0a', fontWeight: 600 },
-  // Claude Code card
-  ccCard: {
-    backgroundColor: 'rgba(64,156,255,0.08)',
-    borderRadius: 12,
-    padding: '10px 12px 10px 12px',
-    marginBottom: 6,
-    border: '0.5px solid rgba(64,156,255,0.15)',
-  },
-  ccLbl: {
-    fontSize: 9, fontWeight: 600, color: 'rgba(100,210,255,0.7)',
-    textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6,
-    display: 'flex', justifyContent: 'space-between',
-  },
-  ccBig: {
-    fontSize: 22, fontWeight: 700, color: '#64d2ff',
-    letterSpacing: '-0.8px', lineHeight: 1,
-  },
-  ccMeta: {
-    fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 4,
-  },
-  ccChips: {
-    display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap',
-  },
-  ccChip: {
-    fontSize: 9, fontWeight: 500,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    color: 'rgba(255,255,255,0.65)',
-    padding: '2px 6px', borderRadius: 4,
-  },
-  // Secondary account row
   acctCard: {
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 10,
-    padding: '8px 12px',
-    marginBottom: 6,
+    borderRadius: 10, padding: '8px 12px', marginBottom: 6,
     border: '0.5px solid rgba(255,255,255,0.06)',
   },
   acctRow: {
@@ -157,7 +123,6 @@ var s = {
   },
   acctLabel: {
     fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)',
-    letterSpacing: '-0.1px',
   },
   acctMetric: {
     fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)',
@@ -168,229 +133,32 @@ var s = {
     fontVariantNumeric: 'tabular-nums',
   },
   acctErr: {
-    fontSize: 9, color: 'rgba(255,159,10,0.7)',
-    marginLeft: 8,
+    fontSize: 9, color: 'rgba(255,159,10,0.7)', marginLeft: 8,
   },
-  // 7-day project drill-down
-  projRow: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    marginTop: 4, fontSize: 10,
+  // Tiny Claude Code summary line
+  ccSummary: {
+    backgroundColor: 'rgba(64,156,255,0.08)',
+    borderRadius: 10,
+    padding: '7px 12px',
+    border: '0.5px solid rgba(64,156,255,0.15)',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    fontSize: 11, color: 'rgba(255,255,255,0.75)',
   },
-  projName: {
-    flex: 1, color: 'rgba(255,255,255,0.7)', fontWeight: 500,
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
-  projTokens: {
-    color: 'rgba(255,255,255,0.5)', fontVariantNumeric: 'tabular-nums',
-    fontSize: 9,
-  },
-  projBars: {
-    display: 'flex', alignItems: 'flex-end', gap: 1,
-    height: 12, flexShrink: 0,
-  },
-  projBar: {
-    width: 4, backgroundColor: '#64d2ff', borderRadius: 1,
-    minHeight: 1,
-  },
-  // Heatmap section (365-day GitHub-style)
-  heatSection: {
-    marginTop: 10,
-    paddingTop: 8,
-    borderTop: '0.5px solid rgba(100,210,255,0.12)',
-  },
-  heatHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-    marginBottom: 6,
-  },
-  heatTitle: {
-    fontSize: 9, fontWeight: 600,
-    color: 'rgba(100,210,255,0.6)',
-    textTransform: 'uppercase', letterSpacing: '0.6px',
-  },
-  heatStats: {
-    fontSize: 9, color: 'rgba(255,255,255,0.4)',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  heatGrid: {
-    display: 'grid',
-    gridTemplateRows: 'repeat(7, 3px)',
-    gridAutoFlow: 'column',
-    gridAutoColumns: '3px',
-    gap: 1,
-    width: '100%',
-  },
-  // Hourly distribution
-  hourSection: {
-    marginTop: 10,
-  },
-  hourBars: {
-    display: 'flex', alignItems: 'flex-end', gap: 1,
-    height: 18,
-  },
-  hourBar: {
-    flex: 1, backgroundColor: '#64d2ff', borderRadius: 1,
-    minHeight: 1,
-  },
-  hourLabels: {
-    display: 'flex', justifyContent: 'space-between',
-    fontSize: 8, color: 'rgba(255,255,255,0.3)',
-    marginTop: 2, fontVariantNumeric: 'tabular-nums',
-  },
-  // 30-day leaderboard
-  lbGroup: {
-    marginTop: 8,
-  },
-  lbGroupHdr: {
-    fontSize: 9, fontWeight: 600,
-    color: 'rgba(255,255,255,0.45)',
-    letterSpacing: '0.4px',
-    marginBottom: 4,
-  },
-  lbRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 50px auto',
-    alignItems: 'center', gap: 8,
-    fontSize: 10, marginBottom: 3,
-  },
-  lbName: {
-    color: 'rgba(255,255,255,0.75)', fontWeight: 500,
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
-  lbCount: {
-    color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums',
-    fontSize: 9,
-  },
-  lbBarBg: {
-    height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    overflow: 'hidden',
-  },
-  lbShare: {
-    fontSize: 9, color: 'rgba(255,255,255,0.4)',
-    fontVariantNumeric: 'tabular-nums', minWidth: 28,
-    textAlign: 'right',
+  ccSummaryLabel: {
+    fontSize: 10, fontWeight: 600,
+    color: 'rgba(100,210,255,0.7)',
+    letterSpacing: '0.3px',
   },
 };
-
-// ─── Sparkline ────────────────────────────────────────────────────
-
-// Leaderboard group — top items in a category with share bar
-function LeaderboardGroup(props) {
-  var items = props.items || [];
-  var label = props.label;
-  var color = props.color || '#64d2ff';
-  var max = 3;
-  if (items.length === 0) return null;
-
-  return (
-    <div style={s.lbGroup}>
-      <div style={s.lbGroupHdr}>{label}</div>
-      {items.slice(0, max).map(function (it, i) {
-        var share = Math.max(0.5, it.share || 0);
-        return (
-          <div key={i} style={s.lbRow}>
-            <span style={s.lbName}>{it.name}</span>
-            <span style={s.lbCount}>{it.count}×</span>
-            <div style={s.lbBarBg}>
-              <div style={{
-                height: '100%', borderRadius: 2,
-                width: share + '%', backgroundColor: color,
-              }} />
-            </div>
-            <span style={s.lbShare}>{(it.share || 0).toFixed(0)}%</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// 365-day heatmap — GitHub-style contribution graph
-function Heatmap(props) {
-  var buckets = props.buckets || [];
-  var maxV = props.max || Math.max.apply(null, buckets.concat([1]));
-  if (buckets.length === 0) return null;
-
-  // The widget is 280px wide, padded; ~232px usable inside the card.
-  // We render the most recent 53 weeks (371 days) so it always fills 53 cols.
-  // Drop trailing partial week to ensure 7 rows × N cols.
-  var n = buckets.length;
-  var cells = [];
-
-  // Color scale: 5 levels of cyan, mimicking GitHub
-  function colorFor(v) {
-    if (v <= 0) return 'rgba(255,255,255,0.05)';
-    var ratio = v / maxV;
-    if (ratio < 0.2) return 'rgba(100,210,255,0.25)';
-    if (ratio < 0.4) return 'rgba(100,210,255,0.45)';
-    if (ratio < 0.6) return 'rgba(100,210,255,0.65)';
-    if (ratio < 0.8) return 'rgba(100,210,255,0.85)';
-    return '#64d2ff';
-  }
-
-  for (var i = 0; i < n; i++) {
-    var v = buckets[i];
-    cells.push(
-      <div key={i} style={{
-        backgroundColor: colorFor(v),
-        borderRadius: 1,
-      }} />
-    );
-  }
-
-  return <div style={s.heatGrid}>{cells}</div>;
-}
-
-// 24-hour distribution: 24 vertical bars
-function HourlyBars(props) {
-  var buckets = props.buckets || [];
-  var maxV = props.max || Math.max.apply(null, buckets.concat([1]));
-  var bars = [];
-  for (var h = 0; h < 24; h++) {
-    var v = buckets[h] || 0;
-    var pct = maxV > 0 ? (v / maxV) : 0;
-    var height = Math.max(1, Math.round(pct * 18));
-    var opacity = v > 0 ? 0.85 : 0.15;
-    bars.push(
-      <div key={h} style={{
-        flex: 1, backgroundColor: '#64d2ff', borderRadius: 1,
-        height: height, opacity: opacity,
-      }} />
-    );
-  }
-  return <div style={s.hourBars}>{bars}</div>;
-}
-
-// 7-day project bar chart — 7 small vertical bars, height proportional to tokens
-function ProjectBars(props) {
-  var buckets = props.buckets || [];
-  var maxVal = Math.max.apply(null, buckets.concat([1]));
-  var bars = [];
-  for (var i = 0; i < 7; i++) {
-    var v = buckets[i] || 0;
-    var pct = maxVal > 0 ? (v / maxVal) : 0;
-    var height = Math.max(1, Math.round(pct * 12));
-    var opacity = v > 0 ? 0.85 : 0.15;
-    bars.push(
-      <div key={i} style={{
-        width: 4, height: height,
-        backgroundColor: '#64d2ff', borderRadius: 1,
-        opacity: opacity,
-      }} />
-    );
-  }
-  return <div style={s.projBars}>{bars}</div>;
-}
 
 function Sparkline(props) {
   var pts = props.points || [];
   if (pts.length < 2) return null;
   var w = 70, h = 12;
-  var max = 100;
   var step = w / (pts.length - 1);
   var path = pts.map(function (p, i) {
     var x = i * step;
-    var y = h - (Math.max(0, Math.min(p, max)) / max * h);
+    var y = h - (Math.max(0, Math.min(p, 100)) / 100 * h);
     return (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
   }).join(' ');
   return (
@@ -401,8 +169,6 @@ function Sparkline(props) {
     </svg>
   );
 }
-
-// ─── Render ───────────────────────────────────────────────────────
 
 export const render = function (props) {
   var data = null, errorMsg = null, isStale = false;
@@ -427,7 +193,6 @@ export const render = function (props) {
   var ex = (data && data.extra_usage) || null;
   var cc = (data && data._code) || null;
   var allAccounts = (data && data._accounts) || [];
-  // Other accounts = everything except primary
   var primaryAcct = allAccounts.filter(function(a) { return a.primary; })[0];
   var otherAccounts = allAccounts.filter(function(a) { return !a.primary; });
   var primaryLabel = (primaryAcct && primaryAcct.label) || null;
@@ -503,7 +268,7 @@ export const render = function (props) {
             ) : null}
           </div>
 
-          {/* Weekly — All Models */}
+          {/* Weekly */}
           <div style={s.card}>
             <div style={s.lbl}>Weekly — All Models</div>
             <div style={s.row}>
@@ -525,7 +290,7 @@ export const render = function (props) {
             ) : null}
           </div>
 
-          {/* Weekly — Sonnet */}
+          {/* Sonnet */}
           {sn ? (
             <div style={s.card}>
               <div style={s.lbl}>Weekly — Sonnet</div>
@@ -536,12 +301,6 @@ export const render = function (props) {
               <div style={s.bg}>
                 <div style={{height:'100%', borderRadius:2, width: Math.max(snp,1)+'%', background: barGrad(snp, 'linear-gradient(90deg, #30d158, #34c759)')}} />
               </div>
-              {spark.sn && spark.sn.length > 1 ? (
-                <div style={s.metaRow}>
-                  <Sparkline points={spark.sn} color="#30d158" />
-                  <span style={s.eta}>12h trend</span>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
@@ -565,7 +324,7 @@ export const render = function (props) {
             </div>
           ) : null}
 
-          {/* Other accounts (compact) */}
+          {/* Other Accounts */}
           {otherAccounts.length > 0 ? (
             <div style={s.acctCard}>
               <div style={{
@@ -596,122 +355,18 @@ export const render = function (props) {
             </div>
           ) : null}
 
-          {/* Claude Code (today) */}
+          {/* Tiny Claude Code summary — full dashboard lives in claude-code.jsx */}
           {cc && (cc.sessions > 0 || cc.messages > 0) ? (
-            <div style={s.ccCard}>
-              <div style={s.ccLbl}>
-                <span>Claude Code · Today</span>
-                <span style={{color: 'rgba(255,255,255,0.3)'}}>{cc.sessions} {cc.sessions === 1 ? 'session' : 'sessions'}</span>
-              </div>
-              <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between'}}>
-                <span style={s.ccBig}>{formatTokens(cc.tokens_total)}</span>
-                <span style={{fontSize: 10, color: 'rgba(255,255,255,0.4)'}}>
-                  tokens · {cc.messages} msg
+            <div style={s.ccSummary}>
+              <span style={s.ccSummaryLabel}>Claude Code</span>
+              <span>
+                <span style={{fontWeight: 600, color: '#64d2ff'}}>
+                  {formatTokens(cc.tokens_total)}
                 </span>
-              </div>
-              {cc.top_tools && cc.top_tools.length > 0 ? (
-                <div style={s.ccChips}>
-                  {cc.top_tools.slice(0, 4).map(function(t, i) {
-                    return (
-                      <span key={i} style={s.ccChip}>
-                        {t.name} · {t.count}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : null}
-              {cc.top_projects && cc.top_projects.length > 0 ? (
-                <div style={s.ccMeta}>
-                  📁 {cc.top_projects[0].name}
-                  {cc.top_projects.length > 1 ? ' · +' + (cc.top_projects.length - 1) + ' more' : ''}
-                </div>
-              ) : null}
-
-              {cc.projects_7d && cc.projects_7d.length > 0 ? (
-                <div style={{
-                  marginTop: 10,
-                  paddingTop: 8,
-                  borderTop: '0.5px solid rgba(100,210,255,0.12)',
-                }}>
-                  <div style={{
-                    fontSize: 9, fontWeight: 600,
-                    color: 'rgba(100,210,255,0.6)',
-                    textTransform: 'uppercase', letterSpacing: '0.6px',
-                    marginBottom: 4,
-                  }}>7-day breakdown</div>
-                  {cc.projects_7d.slice(0, 4).map(function(p, i) {
-                    return (
-                      <div key={i} style={s.projRow}>
-                        <span style={s.projName}>{p.name}</span>
-                        <span style={s.projTokens}>{formatTokens(p.tokens)}</span>
-                        <ProjectBars buckets={p.buckets} />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {/* 365-day heatmap */}
-              {cc.heatmap && cc.heatmap.active_days > 0 ? (
-                <div style={s.heatSection}>
-                  <div style={s.heatHeader}>
-                    <span style={s.heatTitle}>1-year activity</span>
-                    <span style={s.heatStats}>
-                      {formatTokens(cc.heatmap.total)} · {cc.heatmap.active_days} active days
-                    </span>
-                  </div>
-                  <Heatmap buckets={cc.heatmap.buckets} max={cc.heatmap.max} />
-                </div>
-              ) : null}
-
-              {/* Hourly distribution */}
-              {cc.hourly && cc.hourly.total > 0 ? (
-                <div style={s.hourSection}>
-                  <div style={s.heatHeader}>
-                    <span style={s.heatTitle}>30-day hourly</span>
-                    <span style={s.heatStats}>
-                      peak {String(cc.hourly.peak_hour).padStart(2, '0')}:00
-                    </span>
-                  </div>
-                  <HourlyBars buckets={cc.hourly.buckets} max={cc.hourly.max} />
-                  <div style={s.hourLabels}>
-                    <span>0</span>
-                    <span>6</span>
-                    <span>12</span>
-                    <span>18</span>
-                    <span>23</span>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* 30-day leaderboard (skills + agents) */}
-              {cc.leaderboard && (
-                cc.leaderboard.totals.agents > 0 ||
-                cc.leaderboard.totals.skills > 0
-              ) ? (
-                <div style={s.heatSection}>
-                  <div style={s.heatHeader}>
-                    <span style={s.heatTitle}>30-day leaderboard</span>
-                    <span style={s.heatStats}>
-                      {cc.leaderboard.totals.agents} agents · {cc.leaderboard.totals.skills} skills
-                    </span>
-                  </div>
-                  {cc.leaderboard.agents && cc.leaderboard.agents.length > 0 ? (
-                    <LeaderboardGroup
-                      label="Agents"
-                      items={cc.leaderboard.agents}
-                      color="#bf5af2"
-                    />
-                  ) : null}
-                  {cc.leaderboard.skills && cc.leaderboard.skills.length > 0 ? (
-                    <LeaderboardGroup
-                      label="Skills"
-                      items={cc.leaderboard.skills}
-                      color="#30d158"
-                    />
-                  ) : null}
-                </div>
-              ) : null}
+                <span style={{color: 'rgba(255,255,255,0.4)'}}>
+                  {' '}· {cc.sessions} {cc.sessions === 1 ? 'session' : 'sessions'} today
+                </span>
+              </span>
             </div>
           ) : null}
 
