@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
