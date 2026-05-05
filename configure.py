@@ -87,7 +87,15 @@ def save_config(cfg):
 
 
 def nudge_widgets():
-    """Touch the JSX files + spawn a fresh fetch so widgets refresh fast."""
+    """Force Übersicht to re-render the widgets immediately.
+
+    Übersicht doesn't re-execute the widget `command` just because the
+    .jsx file changed — it only re-runs on the refresh timer (every
+    2 minutes by default). The reliable way to apply config changes is
+    to touch the JSX files AND tell Übersicht to refresh via AppleScript.
+    Falls back to a quit+relaunch if AppleScript isn't allowed.
+    """
+    # Touch the JSX files first so the next render reads them
     for name in ("claude-usage.jsx", "claude-code.jsx"):
         p = os.path.expanduser(
             f"~/Library/Application Support/Übersicht/widgets/{name}"
@@ -97,11 +105,37 @@ def nudge_widgets():
                 os.utime(p, None)
             except Exception:
                 pass
+
+    # Pre-warm the fetch so the cache has fresh data when the widget
+    # asks for it on next render
     try:
         subprocess.Popen(
             ["python3", os.path.expanduser("~/.claude-widget/fetch_usage.py")],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+    except Exception:
+        pass
+
+    # Try the gentle path first: AppleScript refresh
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", 'tell application "Übersicht" to refresh'],
+            capture_output=True, timeout=4,
+        )
+        if result.returncode == 0:
+            return  # refresh succeeded
+    except Exception:
+        pass
+
+    # Fallback: quit + relaunch. Brute force but reliable across macOS
+    # versions and AppleScript permission states.
+    try:
+        subprocess.run(
+            ["osascript", "-e", 'quit app "Übersicht"'],
+            capture_output=True, timeout=4,
+        )
+        time.sleep(1.0)
+        subprocess.Popen(["open", "-a", "Übersicht"])
     except Exception:
         pass
 
