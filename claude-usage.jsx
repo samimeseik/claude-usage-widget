@@ -8,15 +8,20 @@ export const refreshFrequency = 120000;
 
 export const command = "python3 $HOME/.claude-widget/fetch_usage.py 2>/dev/null || cat /tmp/claude_usage_cache.json 2>/dev/null || echo '{\"error\":\"Run install.sh first\"}'";
 
+// Position/width/sections are config-driven (see ~/.claude-widget/config.json)
+// We can't use static CSS for position because the user can override it,
+// so the className only handles font + pointer-events; positioning is
+// applied via inline styles in render().
 export const className = css`
   position: fixed;
-  bottom: 24px;
-  left: 24px;
   z-index: 1;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
-  width: 280px;
   pointer-events: none;
+  /* Defaults — overridden inline from config when output arrives */
+  bottom: 24px;
+  left: 24px;
+  width: 280px;
 `;
 
 // ─── Time helpers ─────────────────────────────────────────────────
@@ -170,6 +175,30 @@ function Sparkline(props) {
   );
 }
 
+// ─── Config helpers ──────────────────────────────────────────────
+
+function widgetConfig(data) {
+  var w = (data && data._widgets && data._widgets.usage) || {};
+  return {
+    enabled: w.enabled !== false,
+    anchor: w.anchor || { vertical: 'bottom', horizontal: 'left' },
+    offset: w.offset || { x: 24, y: 24 },
+    width:  w.width || 280,
+    show:   w.show || ['session','weekly','sonnet','extra','other_accounts','code_summary'],
+  };
+}
+
+function positionStyle(cfg) {
+  var pos = { width: cfg.width };
+  pos[cfg.anchor.vertical === 'top' ? 'top' : 'bottom'] = cfg.offset.y;
+  pos[cfg.anchor.horizontal === 'right' ? 'right' : 'left'] = cfg.offset.x;
+  return pos;
+}
+
+function sectionEnabled(cfg, name) {
+  return cfg.show.indexOf(name) !== -1;
+}
+
 export const render = function (props) {
   var data = null, errorMsg = null, isStale = false;
 
@@ -182,6 +211,10 @@ export const render = function (props) {
       if (data._stale) isStale = true;
     } catch (e) { errorMsg = 'Parse error'; }
   }
+
+  var cfg = widgetConfig(data);
+  // Allow user to disable this widget entirely from config
+  if (!cfg.enabled) return <div />;
 
   var tsStr = data && data._ts ? formatTs(data._ts) : '';
   var now = new Date();
@@ -220,6 +253,7 @@ export const render = function (props) {
   }
 
   return (
+    <div style={positionStyle(cfg)}>
     <div style={s.box}>
       <div style={s.hdr}>
         <div style={s.logo}>C</div>
@@ -247,6 +281,7 @@ export const render = function (props) {
       ) : (
         <div>
           {/* Current Session */}
+          {sectionEnabled(cfg, 'session') ? (
           <div style={s.card}>
             <div style={s.lbl}>Current Session</div>
             <div style={s.row}>
@@ -267,8 +302,10 @@ export const render = function (props) {
               </div>
             ) : null}
           </div>
+          ) : null}
 
           {/* Weekly */}
+          {sectionEnabled(cfg, 'weekly') ? (
           <div style={s.card}>
             <div style={s.lbl}>Weekly — All Models</div>
             <div style={s.row}>
@@ -289,9 +326,10 @@ export const render = function (props) {
               </div>
             ) : null}
           </div>
+          ) : null}
 
           {/* Sonnet */}
-          {sn ? (
+          {sn && sectionEnabled(cfg, 'sonnet') ? (
             <div style={s.card}>
               <div style={s.lbl}>Weekly — Sonnet</div>
               <div style={s.row}>
@@ -305,7 +343,7 @@ export const render = function (props) {
           ) : null}
 
           {/* Extra Usage */}
-          {ex && ex.is_enabled ? (
+          {ex && ex.is_enabled && sectionEnabled(cfg, 'extra') ? (
             <div style={s.card}>
               <div style={s.lbl}>Extra Usage</div>
               <div style={s.row}>
@@ -325,7 +363,7 @@ export const render = function (props) {
           ) : null}
 
           {/* Other Accounts */}
-          {otherAccounts.length > 0 ? (
+          {otherAccounts.length > 0 && sectionEnabled(cfg, 'other_accounts') ? (
             <div style={s.acctCard}>
               <div style={{
                 fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.4)',
@@ -356,7 +394,7 @@ export const render = function (props) {
           ) : null}
 
           {/* Tiny Claude Code summary — full dashboard lives in claude-code.jsx */}
-          {cc && (cc.sessions > 0 || cc.messages > 0) ? (
+          {cc && (cc.sessions > 0 || cc.messages > 0) && sectionEnabled(cfg, 'code_summary') ? (
             <div style={s.ccSummary}>
               <span style={s.ccSummaryLabel}>Claude Code</span>
               <span>
@@ -378,6 +416,7 @@ export const render = function (props) {
           ) : null}
         </div>
       )}
+    </div>
     </div>
   );
 };

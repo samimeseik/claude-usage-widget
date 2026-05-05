@@ -133,6 +133,87 @@ Notes:
 - Each account has its own cache + history files (no cross-contamination).
 - Accounts that don't expose `/usage` (e.g. some API-only orgs return 403) show as "unavailable" instead of breaking the widget.
 
+## Customizing widgets — position, size, sections
+
+Both widgets are fully configurable from `~/.claude-widget/config.json`. Edit the `widgets` block to change where each one sits, how wide it is, and which sections it shows.
+
+### Full config reference
+
+```json
+{
+    "accounts": [...],
+    "cache_path": "/tmp/claude_usage_cache.json",
+    "widgets": {
+        "usage": {
+            "enabled": true,
+            "anchor":  {"vertical": "bottom", "horizontal": "left"},
+            "offset":  {"x": 24, "y": 24},
+            "width":   280,
+            "show":    ["session", "weekly", "sonnet", "extra", "other_accounts", "code_summary"]
+        },
+        "code": {
+            "enabled": true,
+            "anchor":  {"vertical": "bottom", "horizontal": "right"},
+            "offset":  {"x": 24, "y": 24},
+            "width":   300,
+            "show":    ["today", "projects_7d", "heatmap", "hourly", "leaderboard"]
+        }
+    }
+}
+```
+
+| Field | Values | Effect |
+|-------|--------|--------|
+| `enabled` | `true` / `false` | Render the widget at all |
+| `anchor.vertical` | `"top"` / `"bottom"` | Pin to top or bottom of screen |
+| `anchor.horizontal` | `"left"` / `"right"` | Pin to left or right edge |
+| `offset.x` | pixels | Distance from horizontal edge |
+| `offset.y` | pixels | Distance from vertical edge |
+| `width` | pixels | Widget width |
+| `show` | array of section names | Which sections render (and order doesn't matter — sections render in their natural order) |
+
+### Section names
+
+**`usage` widget** — `"session"`, `"weekly"`, `"sonnet"`, `"extra"`, `"other_accounts"`, `"code_summary"`
+
+**`code` widget** — `"today"`, `"projects_7d"`, `"heatmap"`, `"hourly"`, `"leaderboard"`
+
+To **hide** a section, just remove its name from the `show` array. To **enable only what you need** (e.g. minimal mode showing only the session bar):
+
+```json
+"usage": {
+    "show": ["session"]
+}
+```
+
+### Common layouts
+
+**Minimal**: just the session % in the top-right corner
+```json
+"usage": {
+    "anchor": {"vertical": "top", "horizontal": "right"},
+    "offset": {"x": 16, "y": 60},
+    "width": 220,
+    "show": ["session"]
+}
+```
+
+**Compact dashboard**: usage bars top-left, no Claude Code dashboard
+```json
+"usage": {"anchor": {"vertical": "top", "horizontal": "left"}, "offset": {"x": 24, "y": 60}},
+"code":  {"enabled": false}
+```
+
+**Heatmap-only on the right**: just the year activity graph
+```json
+"code": {
+    "anchor": {"vertical": "bottom", "horizontal": "right"},
+    "show": ["today", "heatmap"]
+}
+```
+
+**Apply changes:** edit `config.json`, save, wait ≤2 minutes for the next refresh (or open Übersicht and click "Refresh All Widgets").
+
 ## Config
 
 Single-account config (created by `install.sh`):

@@ -12,16 +12,44 @@ export const refreshFrequency = 120000;
 
 export const command = "python3 $HOME/.claude-widget/fetch_usage.py 2>/dev/null || cat /tmp/claude_usage_cache.json 2>/dev/null || echo '{\"error\":\"Run install.sh first\"}'";
 
+// Position/width/sections are config-driven (see ~/.claude-widget/config.json
+// → "widgets": {"code": {...}}). The className just handles font + pointer
+// events; positioning is applied via inline styles in render().
 export const className = css`
   position: fixed;
-  bottom: 24px;
-  right: 24px;
   z-index: 1;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
-  width: 300px;
   pointer-events: none;
+  /* Defaults — overridden inline from config when output arrives */
+  bottom: 24px;
+  right: 24px;
+  width: 300px;
 `;
+
+// ─── Config helpers ──────────────────────────────────────────────
+
+function widgetConfig(data) {
+  var w = (data && data._widgets && data._widgets.code) || {};
+  return {
+    enabled: w.enabled !== false,
+    anchor: w.anchor || { vertical: 'bottom', horizontal: 'right' },
+    offset: w.offset || { x: 24, y: 24 },
+    width:  w.width || 300,
+    show:   w.show || ['today','projects_7d','heatmap','hourly','leaderboard'],
+  };
+}
+
+function positionStyle(cfg) {
+  var pos = { width: cfg.width };
+  pos[cfg.anchor.vertical === 'top' ? 'top' : 'bottom'] = cfg.offset.y;
+  pos[cfg.anchor.horizontal === 'right' ? 'right' : 'left'] = cfg.offset.x;
+  return pos;
+}
+
+function sectionEnabled(cfg, name) {
+  return cfg.show.indexOf(name) !== -1;
+}
 
 function formatTokens(n) {
   if (!n) return '0';
@@ -267,6 +295,9 @@ export const render = function (props) {
     } catch (e) { errorMsg = 'Parse error'; }
   }
 
+  var cfg = widgetConfig(data);
+  if (!cfg.enabled) return <div />;
+
   var cc = (data && data._code) || null;
 
   // If there's no Claude Code data, render nothing (don't show empty card)
@@ -278,6 +309,7 @@ export const render = function (props) {
   var timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
+    <div style={positionStyle(cfg)}>
     <div style={s.box}>
       <div style={s.hdr}>
         <div style={s.logo}>⌘</div>
@@ -288,6 +320,7 @@ export const render = function (props) {
       </div>
 
       {/* Today */}
+      {sectionEnabled(cfg, 'today') ? (
       <div style={s.todayCard}>
         <div style={s.todayLbl}>
           <span>Today</span>
@@ -319,9 +352,10 @@ export const render = function (props) {
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {/* 7-day projects */}
-      {cc.projects_7d && cc.projects_7d.length > 0 ? (
+      {cc.projects_7d && cc.projects_7d.length > 0 && sectionEnabled(cfg, 'projects_7d') ? (
         <div style={s.section}>
           <div style={s.sectionHdr}>
             <span style={s.sectionTitle}>7-day breakdown</span>
@@ -339,7 +373,7 @@ export const render = function (props) {
       ) : null}
 
       {/* 1-year heatmap */}
-      {cc.heatmap && cc.heatmap.active_days > 0 ? (
+      {cc.heatmap && cc.heatmap.active_days > 0 && sectionEnabled(cfg, 'heatmap') ? (
         <div style={s.section}>
           <div style={s.sectionHdr}>
             <span style={s.sectionTitle}>1-year activity</span>
@@ -352,7 +386,7 @@ export const render = function (props) {
       ) : null}
 
       {/* Hourly */}
-      {cc.hourly && cc.hourly.total > 0 ? (
+      {cc.hourly && cc.hourly.total > 0 && sectionEnabled(cfg, 'hourly') ? (
         <div style={s.section}>
           <div style={s.sectionHdr}>
             <span style={s.sectionTitle}>30-day hourly</span>
@@ -371,7 +405,7 @@ export const render = function (props) {
       {cc.leaderboard && (
         cc.leaderboard.totals.agents > 0 ||
         cc.leaderboard.totals.skills > 0
-      ) ? (
+      ) && sectionEnabled(cfg, 'leaderboard') ? (
         <div style={s.section}>
           <div style={s.sectionHdr}>
             <span style={s.sectionTitle}>30-day leaderboard</span>
@@ -389,6 +423,7 @@ export const render = function (props) {
           ) : null}
         </div>
       ) : null}
+    </div>
     </div>
   );
 };

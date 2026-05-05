@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
@@ -30,6 +30,54 @@ def load_config():
 
 _cfg = load_config()
 CACHE = _cfg.get("cache_path", "/tmp/claude_usage_cache.json")
+
+# ─── Widget layout config (position/size/sections) ─────────────────
+
+# Default widget layout. User overrides via config.json["widgets"].
+# All sections listed in `show` arrays are enabled by default — the
+# user trims them down to what they want.
+DEFAULT_USAGE_SECTIONS = [
+    "session", "weekly", "sonnet", "extra", "other_accounts", "code_summary"
+]
+DEFAULT_CODE_SECTIONS = [
+    "today", "projects_7d", "heatmap", "hourly", "leaderboard"
+]
+DEFAULT_WIDGETS = {
+    "usage": {
+        "enabled": True,
+        "anchor": {"vertical": "bottom", "horizontal": "left"},
+        "offset": {"x": 24, "y": 24},
+        "width": 280,
+        "show": list(DEFAULT_USAGE_SECTIONS),
+    },
+    "code": {
+        "enabled": True,
+        "anchor": {"vertical": "bottom", "horizontal": "right"},
+        "offset": {"x": 24, "y": 24},
+        "width": 300,
+        "show": list(DEFAULT_CODE_SECTIONS),
+    },
+}
+
+def _resolve_widget_config():
+    """Merge user widget overrides on top of defaults."""
+    user = _cfg.get("widgets") or {}
+    if not isinstance(user, dict):
+        user = {}
+    out = {}
+    for key in ("usage", "code"):
+        merged = json.loads(json.dumps(DEFAULT_WIDGETS[key]))
+        u = user.get(key) or {}
+        if isinstance(u, dict):
+            for k, v in u.items():
+                if k in ("anchor", "offset") and isinstance(v, dict):
+                    merged[k].update(v)
+                else:
+                    merged[k] = v
+        out[key] = merged
+    return out
+
+WIDGET_CONFIG = _resolve_widget_config()
 
 def _accounts_from_config(cfg):
     """Resolve account list from config.
@@ -582,6 +630,7 @@ def main():
     if primary_data:
         out = dict(primary_data)
         out["_accounts"] = accounts_out
+        out["_widgets"] = WIDGET_CONFIG
 
         # Code stats and update check are global, attach once at root
         code = get_code_stats()
@@ -598,6 +647,7 @@ def main():
     out = {
         "error": primary_error or "All methods failed for primary account",
         "_accounts": accounts_out,
+        "_widgets": WIDGET_CONFIG,
         "_ts": datetime.now().isoformat(),
     }
     print(json.dumps(out))
