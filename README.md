@@ -5,6 +5,7 @@ A macOS desktop widget that shows your Claude AI usage in real-time with notific
 ## Features
 
 - **Live usage bars** — Session (5h), Weekly (7d), Sonnet with color-coded thresholds
+- **Claude Code card** — Today's sessions, tokens, top tools, and most-used project (reads `~/.claude/projects/*.jsonl` directly — no extra fetches)
 - **Sparkline trends** — Last 12 hours of usage drawn under each card
 - **ETA predictions** — "Reaches 100% at 8:42 PM" when burn rate is rising
 - **Absolute reset times** — "resets Thu 8 PM" instead of vague "1d 5h"

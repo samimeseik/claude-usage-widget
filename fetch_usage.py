@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
@@ -417,8 +417,25 @@ def get_sparkline(history, n=24):
 
 # ─── Main: try all strategies in order ──────────────────────────────
 
+def get_code_stats():
+    """Read Claude Code stats. Best-effort — never breaks the widget."""
+    try:
+        # Look in same dir or fall back to widget install
+        here = SCRIPT_DIR
+        cs_path = os.path.join(here, "code_stats.py")
+        if not os.path.exists(cs_path):
+            return None
+        # Import dynamically to keep startup cheap when not installed
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("code_stats", cs_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.collect_stats()
+    except Exception:
+        return None
+
 def enrich(data, method):
-    """Attach trends, ETA, sparkline + update banner to a successful fetch."""
+    """Attach trends, ETA, sparkline, code stats + update banner."""
     data["_method"] = method
     save_cache(data)
     check_and_notify(data)
@@ -427,6 +444,9 @@ def enrich(data, method):
     data["_trends"] = get_trend(data)
     data["_eta"] = compute_eta(data, history)
     data["_spark"] = get_sparkline(history)
+    code = get_code_stats()
+    if code:
+        data["_code"] = code
     return data
 
 def main():

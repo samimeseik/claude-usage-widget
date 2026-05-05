@@ -214,6 +214,7 @@ info "Config saved"
 
 # Copy Python files
 cp "$SCRIPT_DIR/fetch_usage.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/code_stats.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/claude_usage_widget.py" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/fetch_usage.py"
 info "Scripts installed"

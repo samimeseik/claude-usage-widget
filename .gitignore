@@ -18,3 +18,4 @@ launch_widget.command
 
 # macOS
 .DS_Store
+widget.log

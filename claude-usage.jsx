@@ -60,6 +60,13 @@ function formatTs(ts) {
   } catch (e) { return ''; }
 }
 
+function formatTokens(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+  return String(n);
+}
+
 // ─── Color helpers ────────────────────────────────────────────────
 
 function barColor(pct) {
@@ -108,6 +115,35 @@ var s = {
   },
   eta: { color: 'rgba(255,255,255,0.45)', fontWeight: 500 },
   etaWarn: { color: '#ff9f0a', fontWeight: 600 },
+  // Claude Code card
+  ccCard: {
+    backgroundColor: 'rgba(64,156,255,0.08)',
+    borderRadius: 12,
+    padding: '10px 12px 10px 12px',
+    marginBottom: 6,
+    border: '0.5px solid rgba(64,156,255,0.15)',
+  },
+  ccLbl: {
+    fontSize: 9, fontWeight: 600, color: 'rgba(100,210,255,0.7)',
+    textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6,
+    display: 'flex', justifyContent: 'space-between',
+  },
+  ccBig: {
+    fontSize: 22, fontWeight: 700, color: '#64d2ff',
+    letterSpacing: '-0.8px', lineHeight: 1,
+  },
+  ccMeta: {
+    fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 4,
+  },
+  ccChips: {
+    display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap',
+  },
+  ccChip: {
+    fontSize: 9, fontWeight: 500,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: 'rgba(255,255,255,0.65)',
+    padding: '2px 6px', borderRadius: 4,
+  },
 };
 
 // ─── Sparkline ────────────────────────────────────────────────────
@@ -155,6 +191,7 @@ export const render = function (props) {
   var sd = (data && data.seven_day) || {};
   var sn = (data && data.seven_day_sonnet) || null;
   var ex = (data && data.extra_usage) || null;
+  var cc = (data && data._code) || null;
 
   var sp = Math.round(fh.utilization || 0);
   var wp = Math.round(sd.utilization || 0);
@@ -278,6 +315,39 @@ export const render = function (props) {
                   background: 'linear-gradient(90deg, #64d2ff, #0a84ff)'
                 }} />
               </div>
+            </div>
+          ) : null}
+
+          {/* Claude Code (today) */}
+          {cc && (cc.sessions > 0 || cc.messages > 0) ? (
+            <div style={s.ccCard}>
+              <div style={s.ccLbl}>
+                <span>Claude Code · Today</span>
+                <span style={{color: 'rgba(255,255,255,0.3)'}}>{cc.sessions} {cc.sessions === 1 ? 'session' : 'sessions'}</span>
+              </div>
+              <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between'}}>
+                <span style={s.ccBig}>{formatTokens(cc.tokens_total)}</span>
+                <span style={{fontSize: 10, color: 'rgba(255,255,255,0.4)'}}>
+                  tokens · {cc.messages} msg
+                </span>
+              </div>
+              {cc.top_tools && cc.top_tools.length > 0 ? (
+                <div style={s.ccChips}>
+                  {cc.top_tools.slice(0, 4).map(function(t, i) {
+                    return (
+                      <span key={i} style={s.ccChip}>
+                        {t.name} · {t.count}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {cc.top_projects && cc.top_projects.length > 0 ? (
+                <div style={s.ccMeta}>
+                  📁 {cc.top_projects[0].name}
+                  {cc.top_projects.length > 1 ? ' · +' + (cc.top_projects.length - 1) + ' more' : ''}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
