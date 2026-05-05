@@ -8,20 +8,14 @@ export const refreshFrequency = 120000;
 
 export const command = "python3 $HOME/.claude-widget/fetch_usage.py 2>/dev/null || cat /tmp/claude_usage_cache.json 2>/dev/null || echo '{\"error\":\"Run install.sh first\"}'";
 
-// Position/width/sections are config-driven (see ~/.claude-widget/config.json)
-// We can't use static CSS for position because the user can override it,
-// so the className only handles font + pointer-events; positioning is
-// applied via inline styles in render().
+// className handles ONLY typography. Position is applied entirely via
+// inline styles in render() so config.json can override it dynamically.
+// Putting position here would override the inline styles set by render
+// because Übersicht applies className to its own wrapper element.
 export const className = css`
-  position: fixed;
-  z-index: 1;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   pointer-events: none;
-  /* Defaults — overridden inline from config when output arrives */
-  bottom: 24px;
-  left: 24px;
-  width: 280px;
 `;
 
 // ─── Time helpers ─────────────────────────────────────────────────
@@ -189,7 +183,14 @@ function widgetConfig(data) {
 }
 
 function positionStyle(cfg) {
-  var pos = { width: cfg.width };
+  // Make sure unused anchors are explicitly 'auto' so flipping corners
+  // can never leave a stale top/bottom/left/right from a previous render.
+  var pos = {
+    position: 'fixed',
+    zIndex: 1,
+    width: cfg.width,
+    top: 'auto', bottom: 'auto', left: 'auto', right: 'auto',
+  };
   pos[cfg.anchor.vertical === 'top' ? 'top' : 'bottom'] = cfg.offset.y;
   pos[cfg.anchor.horizontal === 'right' ? 'right' : 'left'] = cfg.offset.x;
   return pos;
