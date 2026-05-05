@@ -171,9 +171,51 @@ var s = {
     fontSize: 9, color: 'rgba(255,159,10,0.7)',
     marginLeft: 8,
   },
+  // 7-day project drill-down
+  projRow: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    marginTop: 4, fontSize: 10,
+  },
+  projName: {
+    flex: 1, color: 'rgba(255,255,255,0.7)', fontWeight: 500,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  projTokens: {
+    color: 'rgba(255,255,255,0.5)', fontVariantNumeric: 'tabular-nums',
+    fontSize: 9,
+  },
+  projBars: {
+    display: 'flex', alignItems: 'flex-end', gap: 1,
+    height: 12, flexShrink: 0,
+  },
+  projBar: {
+    width: 4, backgroundColor: '#64d2ff', borderRadius: 1,
+    minHeight: 1,
+  },
 };
 
 // ─── Sparkline ────────────────────────────────────────────────────
+
+// 7-day project bar chart — 7 small vertical bars, height proportional to tokens
+function ProjectBars(props) {
+  var buckets = props.buckets || [];
+  var maxVal = Math.max.apply(null, buckets.concat([1]));
+  var bars = [];
+  for (var i = 0; i < 7; i++) {
+    var v = buckets[i] || 0;
+    var pct = maxVal > 0 ? (v / maxVal) : 0;
+    var height = Math.max(1, Math.round(pct * 12));
+    var opacity = v > 0 ? 0.85 : 0.15;
+    bars.push(
+      <div key={i} style={{
+        width: 4, height: height,
+        backgroundColor: '#64d2ff', borderRadius: 1,
+        opacity: opacity,
+      }} />
+    );
+  }
+  return <div style={s.projBars}>{bars}</div>;
+}
 
 function Sparkline(props) {
   var pts = props.points || [];
@@ -417,6 +459,30 @@ export const render = function (props) {
                 <div style={s.ccMeta}>
                   📁 {cc.top_projects[0].name}
                   {cc.top_projects.length > 1 ? ' · +' + (cc.top_projects.length - 1) + ' more' : ''}
+                </div>
+              ) : null}
+
+              {cc.projects_7d && cc.projects_7d.length > 0 ? (
+                <div style={{
+                  marginTop: 10,
+                  paddingTop: 8,
+                  borderTop: '0.5px solid rgba(100,210,255,0.12)',
+                }}>
+                  <div style={{
+                    fontSize: 9, fontWeight: 600,
+                    color: 'rgba(100,210,255,0.6)',
+                    textTransform: 'uppercase', letterSpacing: '0.6px',
+                    marginBottom: 4,
+                  }}>7-day breakdown</div>
+                  {cc.projects_7d.slice(0, 4).map(function(p, i) {
+                    return (
+                      <div key={i} style={s.projRow}>
+                        <span style={s.projName}>{p.name}</span>
+                        <span style={s.projTokens}>{formatTokens(p.tokens)}</span>
+                        <ProjectBars buckets={p.buckets} />
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
