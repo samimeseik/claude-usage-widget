@@ -236,9 +236,74 @@ var s = {
     fontSize: 8, color: 'rgba(255,255,255,0.3)',
     marginTop: 2, fontVariantNumeric: 'tabular-nums',
   },
+  // 30-day leaderboard
+  lbGroup: {
+    marginTop: 8,
+  },
+  lbGroupHdr: {
+    fontSize: 9, fontWeight: 600,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: '0.4px',
+    marginBottom: 4,
+  },
+  lbRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr auto 50px auto',
+    alignItems: 'center', gap: 8,
+    fontSize: 10, marginBottom: 3,
+  },
+  lbName: {
+    color: 'rgba(255,255,255,0.75)', fontWeight: 500,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  lbCount: {
+    color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums',
+    fontSize: 9,
+  },
+  lbBarBg: {
+    height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  lbShare: {
+    fontSize: 9, color: 'rgba(255,255,255,0.4)',
+    fontVariantNumeric: 'tabular-nums', minWidth: 28,
+    textAlign: 'right',
+  },
 };
 
 // ─── Sparkline ────────────────────────────────────────────────────
+
+// Leaderboard group — top items in a category with share bar
+function LeaderboardGroup(props) {
+  var items = props.items || [];
+  var label = props.label;
+  var color = props.color || '#64d2ff';
+  var max = 3;
+  if (items.length === 0) return null;
+
+  return (
+    <div style={s.lbGroup}>
+      <div style={s.lbGroupHdr}>{label}</div>
+      {items.slice(0, max).map(function (it, i) {
+        var share = Math.max(0.5, it.share || 0);
+        return (
+          <div key={i} style={s.lbRow}>
+            <span style={s.lbName}>{it.name}</span>
+            <span style={s.lbCount}>{it.count}×</span>
+            <div style={s.lbBarBg}>
+              <div style={{
+                height: '100%', borderRadius: 2,
+                width: share + '%', backgroundColor: color,
+              }} />
+            </div>
+            <span style={s.lbShare}>{(it.share || 0).toFixed(0)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // 365-day heatmap — GitHub-style contribution graph
 function Heatmap(props) {
@@ -616,6 +681,35 @@ export const render = function (props) {
                     <span>18</span>
                     <span>23</span>
                   </div>
+                </div>
+              ) : null}
+
+              {/* 30-day leaderboard (skills + agents) */}
+              {cc.leaderboard && (
+                cc.leaderboard.totals.agents > 0 ||
+                cc.leaderboard.totals.skills > 0
+              ) ? (
+                <div style={s.heatSection}>
+                  <div style={s.heatHeader}>
+                    <span style={s.heatTitle}>30-day leaderboard</span>
+                    <span style={s.heatStats}>
+                      {cc.leaderboard.totals.agents} agents · {cc.leaderboard.totals.skills} skills
+                    </span>
+                  </div>
+                  {cc.leaderboard.agents && cc.leaderboard.agents.length > 0 ? (
+                    <LeaderboardGroup
+                      label="Agents"
+                      items={cc.leaderboard.agents}
+                      color="#bf5af2"
+                    />
+                  ) : null}
+                  {cc.leaderboard.skills && cc.leaderboard.skills.length > 0 ? (
+                    <LeaderboardGroup
+                      label="Skills"
+                      items={cc.leaderboard.skills}
+                      color="#30d158"
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </div>

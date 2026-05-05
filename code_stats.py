@@ -26,6 +26,7 @@ PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 HEATMAP_CACHE = os.path.expanduser("~/.claude-widget/heatmap_cache.json")
 HEATMAP_TTL_SECONDS = 3600  # rebuild at most once per hour
 HOURLY_CACHE = os.path.expanduser("~/.claude-widget/hourly_cache.json")
+LEADERBOARD_CACHE = os.path.expanduser("~/.claude-widget/leaderboard_cache.json")
 
 
 def _today_start_iso():
@@ -195,6 +196,135 @@ def compute_heatmap(days=365):
     try:
         os.makedirs(os.path.dirname(HEATMAP_CACHE), exist_ok=True)
         with open(HEATMAP_CACHE, "w") as f:
+            json.dump(out, f)
+    except Exception:
+        pass
+    return out
+
+
+def compute_leaderboard(days=30):
+    """30-day Skills + Agents leaderboard.
+
+    Returns:
+      {
+        "days": int,
+        "skills": [{"name", "count", "share"}],   # top 5 by count
+        "agents": [{"name", "count", "share"}],   # top 5 by count
+        "tools":  [{"name", "count", "share"}],   # top 5 — for context
+        "totals": {"skills": int, "agents": int, "tools": int},
+        "as_of":  ISO8601
+      }
+
+    Cached identically to heatmap (1-hour TTL).
+    """
+    try:
+        if os.path.exists(LEADERBOARD_CACHE):
+            age = time.time() - os.path.getmtime(LEADERBOARD_CACHE)
+            if age < HEATMAP_TTL_SECONDS:
+                with open(LEADERBOARD_CACHE, "r") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+
+    from datetime import timedelta
+    today = datetime.now().astimezone()
+    cutoff_dt = datetime.combine(
+        (today - timedelta(days=days - 1)).date(),
+        dtime.min, tzinfo=today.tzinfo,
+    )
+    cutoff_ts = cutoff_dt.timestamp()
+    file_cutoff_ts = datetime.now().timestamp() - ((days + 2) * 86400)
+
+    skills = defaultdict(int)
+    agents = defaultdict(int)
+    tools = defaultdict(int)
+
+    if os.path.isdir(PROJECTS_DIR):
+        for project in os.listdir(PROJECTS_DIR):
+            project_path = os.path.join(PROJECTS_DIR, project)
+            if not os.path.isdir(project_path):
+                continue
+            for fp in glob.glob(os.path.join(project_path, "*.jsonl")):
+                try:
+                    if os.path.getmtime(fp) < file_cutoff_ts:
+                        continue
+                except OSError:
+                    continue
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                            except (ValueError, json.JSONDecodeError):
+                                continue
+                            if rec.get("type") != "assistant":
+                                continue
+                            ts = rec.get("timestamp")
+                            if not ts:
+                                continue
+                            try:
+                                rec_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                                if rec_dt.timestamp() < cutoff_ts:
+                                    continue
+                            except (ValueError, TypeError):
+                                continue
+                            msg = rec.get("message") or {}
+                            content = msg.get("content") if isinstance(msg, dict) else None
+                            if not isinstance(content, list):
+                                continue
+                            for c in content:
+                                if not isinstance(c, dict) or c.get("type") != "tool_use":
+                                    continue
+                                name = c.get("name") or ""
+                                tools[name] += 1
+                                inp = c.get("input") or {}
+                                if not isinstance(inp, dict):
+                                    continue
+                                if name == "Skill":
+                                    sk = inp.get("skill")
+                                    if sk:
+                                        skills[sk] += 1
+                                elif name == "Agent":
+                                    sub = inp.get("subagent_type")
+                                    if sub:
+                                        agents[sub] += 1
+                except OSError:
+                    continue
+
+    def rank(counter, total):
+        items = sorted(counter.items(), key=lambda kv: kv[1], reverse=True)[:5]
+        return [
+            {
+                "name": k,
+                "count": v,
+                "share": round(v / total * 100, 1) if total else 0.0,
+            }
+            for k, v in items
+        ]
+
+    total_skills = sum(skills.values())
+    total_agents = sum(agents.values())
+    total_tools = sum(tools.values())
+
+    out = {
+        "days": days,
+        "skills": rank(skills, total_skills),
+        "agents": rank(agents, total_agents),
+        "tools":  rank(tools, total_tools),
+        "totals": {
+            "skills": total_skills,
+            "agents": total_agents,
+            "tools":  total_tools,
+        },
+        "as_of": today.isoformat(),
+    }
+
+    try:
+        os.makedirs(os.path.dirname(LEADERBOARD_CACHE), exist_ok=True)
+        with open(LEADERBOARD_CACHE, "w") as f:
             json.dump(out, f)
     except Exception:
         pass
@@ -513,6 +643,8 @@ def collect_stats():
         "heatmap": compute_heatmap(365),
         # Hour-of-day distribution over last 30 days (cached)
         "hourly": compute_hourly(30),
+        # 30-day skills + agents + tools leaderboard (cached)
+        "leaderboard": compute_leaderboard(30),
     }
     return out
 
