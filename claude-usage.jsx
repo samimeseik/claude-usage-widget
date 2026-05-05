@@ -192,9 +192,109 @@ var s = {
     width: 4, backgroundColor: '#64d2ff', borderRadius: 1,
     minHeight: 1,
   },
+  // Heatmap section (365-day GitHub-style)
+  heatSection: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: '0.5px solid rgba(100,210,255,0.12)',
+  },
+  heatHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+    marginBottom: 6,
+  },
+  heatTitle: {
+    fontSize: 9, fontWeight: 600,
+    color: 'rgba(100,210,255,0.6)',
+    textTransform: 'uppercase', letterSpacing: '0.6px',
+  },
+  heatStats: {
+    fontSize: 9, color: 'rgba(255,255,255,0.4)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  heatGrid: {
+    display: 'grid',
+    gridTemplateRows: 'repeat(7, 3px)',
+    gridAutoFlow: 'column',
+    gridAutoColumns: '3px',
+    gap: 1,
+    width: '100%',
+  },
+  // Hourly distribution
+  hourSection: {
+    marginTop: 10,
+  },
+  hourBars: {
+    display: 'flex', alignItems: 'flex-end', gap: 1,
+    height: 18,
+  },
+  hourBar: {
+    flex: 1, backgroundColor: '#64d2ff', borderRadius: 1,
+    minHeight: 1,
+  },
+  hourLabels: {
+    display: 'flex', justifyContent: 'space-between',
+    fontSize: 8, color: 'rgba(255,255,255,0.3)',
+    marginTop: 2, fontVariantNumeric: 'tabular-nums',
+  },
 };
 
 // ─── Sparkline ────────────────────────────────────────────────────
+
+// 365-day heatmap — GitHub-style contribution graph
+function Heatmap(props) {
+  var buckets = props.buckets || [];
+  var maxV = props.max || Math.max.apply(null, buckets.concat([1]));
+  if (buckets.length === 0) return null;
+
+  // The widget is 280px wide, padded; ~232px usable inside the card.
+  // We render the most recent 53 weeks (371 days) so it always fills 53 cols.
+  // Drop trailing partial week to ensure 7 rows × N cols.
+  var n = buckets.length;
+  var cells = [];
+
+  // Color scale: 5 levels of cyan, mimicking GitHub
+  function colorFor(v) {
+    if (v <= 0) return 'rgba(255,255,255,0.05)';
+    var ratio = v / maxV;
+    if (ratio < 0.2) return 'rgba(100,210,255,0.25)';
+    if (ratio < 0.4) return 'rgba(100,210,255,0.45)';
+    if (ratio < 0.6) return 'rgba(100,210,255,0.65)';
+    if (ratio < 0.8) return 'rgba(100,210,255,0.85)';
+    return '#64d2ff';
+  }
+
+  for (var i = 0; i < n; i++) {
+    var v = buckets[i];
+    cells.push(
+      <div key={i} style={{
+        backgroundColor: colorFor(v),
+        borderRadius: 1,
+      }} />
+    );
+  }
+
+  return <div style={s.heatGrid}>{cells}</div>;
+}
+
+// 24-hour distribution: 24 vertical bars
+function HourlyBars(props) {
+  var buckets = props.buckets || [];
+  var maxV = props.max || Math.max.apply(null, buckets.concat([1]));
+  var bars = [];
+  for (var h = 0; h < 24; h++) {
+    var v = buckets[h] || 0;
+    var pct = maxV > 0 ? (v / maxV) : 0;
+    var height = Math.max(1, Math.round(pct * 18));
+    var opacity = v > 0 ? 0.85 : 0.15;
+    bars.push(
+      <div key={h} style={{
+        flex: 1, backgroundColor: '#64d2ff', borderRadius: 1,
+        height: height, opacity: opacity,
+      }} />
+    );
+  }
+  return <div style={s.hourBars}>{bars}</div>;
+}
 
 // 7-day project bar chart — 7 small vertical bars, height proportional to tokens
 function ProjectBars(props) {
@@ -483,6 +583,39 @@ export const render = function (props) {
                       </div>
                     );
                   })}
+                </div>
+              ) : null}
+
+              {/* 365-day heatmap */}
+              {cc.heatmap && cc.heatmap.active_days > 0 ? (
+                <div style={s.heatSection}>
+                  <div style={s.heatHeader}>
+                    <span style={s.heatTitle}>1-year activity</span>
+                    <span style={s.heatStats}>
+                      {formatTokens(cc.heatmap.total)} · {cc.heatmap.active_days} active days
+                    </span>
+                  </div>
+                  <Heatmap buckets={cc.heatmap.buckets} max={cc.heatmap.max} />
+                </div>
+              ) : null}
+
+              {/* Hourly distribution */}
+              {cc.hourly && cc.hourly.total > 0 ? (
+                <div style={s.hourSection}>
+                  <div style={s.heatHeader}>
+                    <span style={s.heatTitle}>30-day hourly</span>
+                    <span style={s.heatStats}>
+                      peak {String(cc.hourly.peak_hour).padStart(2, '0')}:00
+                    </span>
+                  </div>
+                  <HourlyBars buckets={cc.hourly.buckets} max={cc.hourly.max} />
+                  <div style={s.hourLabels}>
+                    <span>0</span>
+                    <span>6</span>
+                    <span>12</span>
+                    <span>18</span>
+                    <span>23</span>
+                  </div>
                 </div>
               ) : null}
             </div>

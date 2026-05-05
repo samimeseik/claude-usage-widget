@@ -18,10 +18,14 @@ today's local midnight.
 import os
 import json
 import glob
+import time
 from datetime import datetime, time as dtime
 from collections import defaultdict
 
 PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
+HEATMAP_CACHE = os.path.expanduser("~/.claude-widget/heatmap_cache.json")
+HEATMAP_TTL_SECONDS = 3600  # rebuild at most once per hour
+HOURLY_CACHE = os.path.expanduser("~/.claude-widget/hourly_cache.json")
 
 
 def _today_start_iso():
@@ -82,6 +86,212 @@ def _iter_recent_files(max_age_hours=30):
                     yield project, fp
             except OSError:
                 continue
+
+
+def compute_heatmap(days=365):
+    """Walk ALL .jsonl files within `days`, bin tokens by local date.
+
+    Returns dict:
+      {
+        "days": days,
+        "buckets": [int, ...],   # length=days, [oldest ... today]
+        "max":    int,           # peak day for color scaling
+        "total":  int,           # sum across the window
+        "active_days": int,      # count of non-zero days
+        "as_of":  ISO8601
+      }
+
+    Result is cached for HEATMAP_TTL_SECONDS to keep refresh under 50ms.
+    """
+    # Try cache first
+    try:
+        if os.path.exists(HEATMAP_CACHE):
+            age = time.time() - os.path.getmtime(HEATMAP_CACHE)
+            if age < HEATMAP_TTL_SECONDS:
+                with open(HEATMAP_CACHE, "r") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+
+    from datetime import timedelta
+    today = datetime.now().astimezone()
+    cutoff_dt = datetime.combine(
+        (today - timedelta(days=days - 1)).date(),
+        dtime.min, tzinfo=today.tzinfo,
+    )
+    cutoff_ts = cutoff_dt.timestamp()
+    file_cutoff_ts = datetime.now().timestamp() - ((days + 2) * 86400)
+
+    buckets = [0] * days
+
+    if not os.path.isdir(PROJECTS_DIR):
+        out = {
+            "days": days, "buckets": buckets, "max": 0,
+            "total": 0, "active_days": 0,
+            "as_of": today.isoformat(),
+        }
+        return out
+
+    for project in os.listdir(PROJECTS_DIR):
+        project_path = os.path.join(PROJECTS_DIR, project)
+        if not os.path.isdir(project_path):
+            continue
+        for fp in glob.glob(os.path.join(project_path, "*.jsonl")):
+            try:
+                if os.path.getmtime(fp) < file_cutoff_ts:
+                    continue
+            except OSError:
+                continue
+            try:
+                with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except (ValueError, json.JSONDecodeError):
+                            continue
+                        if rec.get("type") != "assistant":
+                            continue
+                        ts = rec.get("timestamp")
+                        if not ts:
+                            continue
+                        try:
+                            rec_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                            rec_ts = rec_dt.timestamp()
+                        except (ValueError, TypeError):
+                            continue
+                        if rec_ts < cutoff_ts:
+                            continue
+                        msg = rec.get("message") or {}
+                        if not isinstance(msg, dict):
+                            continue
+                        usage = msg.get("usage") or {}
+                        if not isinstance(usage, dict):
+                            continue
+                        total = (
+                            int(usage.get("input_tokens", 0) or 0)
+                            + int(usage.get("output_tokens", 0) or 0)
+                            + int(usage.get("cache_creation_input_tokens", 0) or 0)
+                        )
+                        if not total:
+                            continue
+                        days_back = (today.date() - rec_dt.astimezone().date()).days
+                        idx = (days - 1) - days_back
+                        if 0 <= idx < days:
+                            buckets[idx] += total
+            except OSError:
+                continue
+
+    out = {
+        "days": days,
+        "buckets": buckets,
+        "max": max(buckets) if buckets else 0,
+        "total": sum(buckets),
+        "active_days": sum(1 for b in buckets if b > 0),
+        "as_of": today.isoformat(),
+    }
+    try:
+        os.makedirs(os.path.dirname(HEATMAP_CACHE), exist_ok=True)
+        with open(HEATMAP_CACHE, "w") as f:
+            json.dump(out, f)
+    except Exception:
+        pass
+    return out
+
+
+def compute_hourly(days=30):
+    """Hour-of-day distribution over the last `days` days. 24 buckets.
+
+    Tells you when in the day you're most active. Cached like heatmap.
+    """
+    try:
+        if os.path.exists(HOURLY_CACHE):
+            age = time.time() - os.path.getmtime(HOURLY_CACHE)
+            if age < HEATMAP_TTL_SECONDS:
+                with open(HOURLY_CACHE, "r") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+
+    from datetime import timedelta
+    today = datetime.now().astimezone()
+    cutoff_dt = datetime.combine(
+        (today - timedelta(days=days - 1)).date(),
+        dtime.min, tzinfo=today.tzinfo,
+    )
+    cutoff_ts = cutoff_dt.timestamp()
+    file_cutoff_ts = datetime.now().timestamp() - ((days + 2) * 86400)
+
+    buckets = [0] * 24
+
+    if os.path.isdir(PROJECTS_DIR):
+        for project in os.listdir(PROJECTS_DIR):
+            project_path = os.path.join(PROJECTS_DIR, project)
+            if not os.path.isdir(project_path):
+                continue
+            for fp in glob.glob(os.path.join(project_path, "*.jsonl")):
+                try:
+                    if os.path.getmtime(fp) < file_cutoff_ts:
+                        continue
+                except OSError:
+                    continue
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                            except (ValueError, json.JSONDecodeError):
+                                continue
+                            if rec.get("type") != "assistant":
+                                continue
+                            ts = rec.get("timestamp")
+                            if not ts:
+                                continue
+                            try:
+                                rec_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                                rec_ts = rec_dt.timestamp()
+                            except (ValueError, TypeError):
+                                continue
+                            if rec_ts < cutoff_ts:
+                                continue
+                            msg = rec.get("message") or {}
+                            if not isinstance(msg, dict):
+                                continue
+                            usage = msg.get("usage") or {}
+                            if not isinstance(usage, dict):
+                                continue
+                            total = (
+                                int(usage.get("input_tokens", 0) or 0)
+                                + int(usage.get("output_tokens", 0) or 0)
+                                + int(usage.get("cache_creation_input_tokens", 0) or 0)
+                            )
+                            if not total:
+                                continue
+                            local_dt = rec_dt.astimezone()
+                            buckets[local_dt.hour] += total
+                except OSError:
+                    continue
+
+    out = {
+        "days": days,
+        "buckets": buckets,
+        "max": max(buckets) if buckets else 0,
+        "total": sum(buckets),
+        "peak_hour": (buckets.index(max(buckets)) if any(buckets) else None),
+        "as_of": today.isoformat(),
+    }
+    try:
+        os.makedirs(os.path.dirname(HOURLY_CACHE), exist_ok=True)
+        with open(HOURLY_CACHE, "w") as f:
+            json.dump(out, f)
+    except Exception:
+        pass
+    return out
 
 
 def _scan_seven_day_projects():
@@ -299,6 +509,10 @@ def collect_stats():
         "as_of": datetime.now().astimezone().isoformat(),
         # 7-day per-project breakdown for the drill-down view
         "projects_7d": _scan_seven_day_projects(),
+        # 365-day token activity heatmap (cached, refreshed hourly)
+        "heatmap": compute_heatmap(365),
+        # Hour-of-day distribution over last 30 days (cached)
+        "hourly": compute_hourly(30),
     }
     return out
 
