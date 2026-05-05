@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
@@ -40,7 +40,7 @@ DEFAULT_USAGE_SECTIONS = [
     "session", "weekly", "sonnet", "extra", "other_accounts", "code_summary"
 ]
 DEFAULT_CODE_SECTIONS = [
-    "today", "projects_7d", "heatmap", "hourly", "leaderboard"
+    "today", "projects_7d", "heatmap", "hourly", "leaderboard", "value"
 ]
 DEFAULT_WIDGETS = {
     "usage": {

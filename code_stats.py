@@ -23,6 +23,26 @@ from datetime import datetime, time as dtime
 from collections import defaultdict
 
 PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
+
+# ─── API pricing (per 1M tokens, USD) ──────────────────────────────
+# Source: anthropic.com/pricing (2026 rates).
+# We match models by substring — "sonnet-4-6", "claude-sonnet-4-6",
+# "claude-3-5-sonnet" all match the "sonnet" entry. Opus comes first
+# so "claude-opus-4-7" doesn't accidentally match the sonnet rule.
+PRICING = [
+    # (substring, input, output, cache_read_multiplier, cache_write_multiplier)
+    ("opus",       15.00, 75.00, 0.10, 1.25),
+    ("sonnet",      3.00, 15.00, 0.10, 1.25),
+    ("haiku",       0.80,  4.00, 0.10, 1.25),
+]
+DEFAULT_PRICING = ("sonnet", 3.00, 15.00, 0.10, 1.25)
+# Plan prices (USD/month) — used to compute "value vs plan"
+PLAN_PRICES = {
+    "max":   200.0,
+    "max5x": 100.0,  # Claude Max 5x ($100/mo tier)
+    "pro":    20.0,
+}
+COST_CACHE = os.path.expanduser("~/.claude-widget/cost_cache.json")
 HEATMAP_CACHE = os.path.expanduser("~/.claude-widget/heatmap_cache.json")
 HEATMAP_TTL_SECONDS = 3600  # rebuild at most once per hour
 HOURLY_CACHE = os.path.expanduser("~/.claude-widget/hourly_cache.json")
@@ -196,6 +216,171 @@ def compute_heatmap(days=365):
     try:
         os.makedirs(os.path.dirname(HEATMAP_CACHE), exist_ok=True)
         with open(HEATMAP_CACHE, "w") as f:
+            json.dump(out, f)
+    except Exception:
+        pass
+    return out
+
+
+def _price_for_model(model_name):
+    """Return (input, output, cache_read_mult, cache_write_mult) for a model name."""
+    if not model_name:
+        return DEFAULT_PRICING[1:]
+    lower = str(model_name).lower()
+    for sub, inp, outp, cr, cw in PRICING:
+        if sub in lower:
+            return (inp, outp, cr, cw)
+    return DEFAULT_PRICING[1:]
+
+
+def compute_cost(days=30):
+    """API-equivalent cost over the last `days` days, broken down by model.
+
+    Returns:
+      {
+        "days": int,
+        "month_to_date": float,    # cost since the 1st of the current month
+        "last_30d":      float,    # full window cost
+        "projected_month": float,  # extrapolated full-month cost
+        "by_model": [{"name", "tokens", "cost"}],
+        "savings_vs_max": float,   # max(0, last_30d - 200)
+        "as_of": ISO8601,
+      }
+
+    Cached for 1 hour like heatmap.
+    """
+    try:
+        if os.path.exists(COST_CACHE):
+            age = time.time() - os.path.getmtime(COST_CACHE)
+            if age < HEATMAP_TTL_SECONDS:
+                with open(COST_CACHE, "r") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+
+    from datetime import timedelta
+    today = datetime.now().astimezone()
+    month_start = datetime.combine(
+        today.date().replace(day=1), dtime.min, tzinfo=today.tzinfo,
+    )
+    cutoff_dt = datetime.combine(
+        (today - timedelta(days=days - 1)).date(),
+        dtime.min, tzinfo=today.tzinfo,
+    )
+    cutoff_ts = cutoff_dt.timestamp()
+    month_start_ts = month_start.timestamp()
+    file_cutoff_ts = datetime.now().timestamp() - ((days + 2) * 86400)
+
+    by_model = defaultdict(lambda: {
+        "input": 0, "output": 0, "cache_read": 0, "cache_create": 0
+    })
+    month_cost_acc = 0.0
+    window_cost_acc = 0.0
+
+    if os.path.isdir(PROJECTS_DIR):
+        for project in os.listdir(PROJECTS_DIR):
+            project_path = os.path.join(PROJECTS_DIR, project)
+            if not os.path.isdir(project_path):
+                continue
+            for fp in glob.glob(os.path.join(project_path, "*.jsonl")):
+                try:
+                    if os.path.getmtime(fp) < file_cutoff_ts:
+                        continue
+                except OSError:
+                    continue
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                            except (ValueError, json.JSONDecodeError):
+                                continue
+                            if rec.get("type") != "assistant":
+                                continue
+                            ts = rec.get("timestamp")
+                            if not ts:
+                                continue
+                            try:
+                                rec_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                                rec_ts = rec_dt.timestamp()
+                            except (ValueError, TypeError):
+                                continue
+                            if rec_ts < cutoff_ts:
+                                continue
+                            msg = rec.get("message") or {}
+                            if not isinstance(msg, dict):
+                                continue
+                            usage = msg.get("usage") or {}
+                            if not isinstance(usage, dict):
+                                continue
+                            model = msg.get("model") or "unknown"
+                            inp_t = int(usage.get("input_tokens", 0) or 0)
+                            out_t = int(usage.get("output_tokens", 0) or 0)
+                            cr_t  = int(usage.get("cache_read_input_tokens", 0) or 0)
+                            cw_t  = int(usage.get("cache_creation_input_tokens", 0) or 0)
+                            if not (inp_t or out_t or cr_t or cw_t):
+                                continue
+
+                            inp_p, out_p, cr_mult, cw_mult = _price_for_model(model)
+                            line_cost = (
+                                inp_t * inp_p / 1_000_000 +
+                                out_t * out_p / 1_000_000 +
+                                cr_t  * inp_p * cr_mult / 1_000_000 +
+                                cw_t  * inp_p * cw_mult / 1_000_000
+                            )
+
+                            window_cost_acc += line_cost
+                            if rec_ts >= month_start_ts:
+                                month_cost_acc += line_cost
+
+                            slot = by_model[model]
+                            slot["input"]        += inp_t
+                            slot["output"]       += out_t
+                            slot["cache_read"]   += cr_t
+                            slot["cache_create"] += cw_t
+                            slot["cost"] = slot.get("cost", 0.0) + line_cost
+                except OSError:
+                    continue
+
+    # Per-model totals
+    by_model_out = []
+    for model, agg in sorted(by_model.items(), key=lambda kv: kv[1].get("cost", 0), reverse=True):
+        tokens = agg["input"] + agg["output"] + agg["cache_create"]
+        short = model.replace("claude-", "")
+        by_model_out.append({
+            "name":   short,
+            "tokens": tokens,
+            "cost":   round(agg.get("cost", 0.0), 2),
+        })
+
+    # Projected full-month cost: scale month_to_date by (days_in_month / day_of_month)
+    days_passed = today.day
+    # last day of current month
+    if today.month == 12:
+        next_month = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        next_month = today.replace(month=today.month + 1, day=1)
+    days_in_month = (next_month - timedelta(days=1)).day
+    projected = (
+        month_cost_acc / max(days_passed, 1) * days_in_month
+        if month_cost_acc > 0 else 0.0
+    )
+
+    out = {
+        "days": days,
+        "month_to_date":    round(month_cost_acc, 2),
+        "last_30d":         round(window_cost_acc, 2),
+        "projected_month":  round(projected, 2),
+        "by_model":         by_model_out[:5],
+        "savings_vs_max":   round(max(0, window_cost_acc - PLAN_PRICES["max"]), 2),
+        "as_of":            today.isoformat(),
+    }
+    try:
+        os.makedirs(os.path.dirname(COST_CACHE), exist_ok=True)
+        with open(COST_CACHE, "w") as f:
             json.dump(out, f)
     except Exception:
         pass
@@ -645,6 +830,8 @@ def collect_stats():
         "hourly": compute_hourly(30),
         # 30-day skills + agents + tools leaderboard (cached)
         "leaderboard": compute_leaderboard(30),
+        # API-equivalent cost (month-to-date, projected, last-30d) (cached)
+        "cost": compute_cost(30),
     }
     return out
 

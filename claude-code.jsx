@@ -36,7 +36,7 @@ function widgetConfig(data) {
     anchor: w.anchor || { vertical: 'bottom', horizontal: 'right' },
     offset: w.offset || { x: 24, y: 24 },
     width:  w.width || 300,
-    show:   w.show || ['today','projects_7d','heatmap','hourly','leaderboard'],
+    show:   w.show || ['today','projects_7d','heatmap','hourly','leaderboard','value'],
   };
 }
 
@@ -188,6 +188,32 @@ var s = {
     fontSize: 9, color: 'rgba(255,255,255,0.4)',
     fontVariantNumeric: 'tabular-nums', minWidth: 28,
     textAlign: 'right',
+  },
+  // API value / cost section
+  valueCard: {
+    backgroundColor: 'rgba(48,209,88,0.08)',
+    borderRadius: 12, padding: '10px 12px', marginTop: 8,
+    border: '0.5px solid rgba(48,209,88,0.18)',
+  },
+  valueRow: {
+    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+  },
+  valueBig: {
+    fontSize: 22, fontWeight: 700, color: '#30d158',
+    letterSpacing: '-0.8px', lineHeight: 1,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  valueMult: {
+    fontSize: 13, fontWeight: 700, color: '#30d158',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  valueProj: {
+    fontSize: 10, color: 'rgba(255,255,255,0.55)',
+    marginTop: 6,
+  },
+  valueProjStrong: {
+    color: '#fff', fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
   },
 };
 
@@ -399,6 +425,48 @@ export const render = function (props) {
             <span>0</span><span>6</span><span>12</span><span>18</span><span>23</span>
           </div>
         </div>
+      ) : null}
+
+      {/* API Value — what your usage would cost on the API */}
+      {cc.cost && cc.cost.last_30d > 0 && sectionEnabled(cfg, 'value') ? (
+        (function() {
+          var costData = cc.cost;
+          var planPrice = 200; // Max plan reference
+          var mult = costData.last_30d / planPrice;
+          var saved = Math.max(0, costData.last_30d - planPrice);
+          return (
+            <div style={s.valueCard}>
+              <div style={s.sectionHdr}>
+                <span style={Object.assign({}, s.sectionTitle, {color: 'rgba(48,209,88,0.7)'})}>
+                  API value · 30d
+                </span>
+                <span style={s.sectionStats}>vs Max ($200/mo)</span>
+              </div>
+              <div style={s.valueRow}>
+                <span style={s.valueBig}>${costData.last_30d.toLocaleString()}</span>
+                <span style={s.valueMult}>
+                  {mult >= 1 ? '🎉 ' + mult.toFixed(1) + '×' : (mult * 100).toFixed(0) + '% used'}
+                </span>
+              </div>
+              {saved > 0 ? (
+                <div style={s.valueProj}>
+                  Saved <span style={Object.assign({}, s.valueProjStrong, {color: '#30d158'})}>
+                    ${saved.toLocaleString()}
+                  </span>
+                  {' '}vs API · projected this month{' '}
+                  <span style={s.valueProjStrong}>
+                    ${costData.projected_month.toLocaleString()}
+                  </span>
+                </div>
+              ) : (
+                <div style={s.valueProj}>
+                  This month so far <span style={s.valueProjStrong}>${costData.month_to_date}</span>
+                  {' '}· consider Pro plan if &lt; $20
+                </div>
+              )}
+            </div>
+          );
+        })()
       ) : null}
 
       {/* Leaderboard */}
