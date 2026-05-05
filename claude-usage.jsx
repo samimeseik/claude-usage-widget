@@ -144,6 +144,33 @@ var s = {
     color: 'rgba(255,255,255,0.65)',
     padding: '2px 6px', borderRadius: 4,
   },
+  // Secondary account row
+  acctCard: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 10,
+    padding: '8px 12px',
+    marginBottom: 6,
+    border: '0.5px solid rgba(255,255,255,0.06)',
+  },
+  acctRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  },
+  acctLabel: {
+    fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)',
+    letterSpacing: '-0.1px',
+  },
+  acctMetric: {
+    fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  acctMetricMuted: {
+    fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.3)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  acctErr: {
+    fontSize: 9, color: 'rgba(255,159,10,0.7)',
+    marginLeft: 8,
+  },
 };
 
 // ─── Sparkline ────────────────────────────────────────────────────
@@ -192,6 +219,11 @@ export const render = function (props) {
   var sn = (data && data.seven_day_sonnet) || null;
   var ex = (data && data.extra_usage) || null;
   var cc = (data && data._code) || null;
+  var allAccounts = (data && data._accounts) || [];
+  // Other accounts = everything except primary
+  var primaryAcct = allAccounts.filter(function(a) { return a.primary; })[0];
+  var otherAccounts = allAccounts.filter(function(a) { return !a.primary; });
+  var primaryLabel = (primaryAcct && primaryAcct.label) || null;
 
   var sp = Math.round(fh.utilization || 0);
   var wp = Math.round(sd.utilization || 0);
@@ -220,7 +252,15 @@ export const render = function (props) {
       <div style={s.hdr}>
         <div style={s.logo}>C</div>
         <div style={{flex: 1}}>
-          <div style={s.title}>Claude Usage</div>
+          <div style={s.title}>
+            Claude Usage
+            {primaryLabel && otherAccounts.length > 0 ? (
+              <span style={{
+                fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.4)',
+                marginLeft: 6, letterSpacing: 0,
+              }}>· {primaryLabel}</span>
+            ) : null}
+          </div>
           <div style={s.sub}>{isStale ? '⏳ cached · ' + timeStr : timeStr}</div>
         </div>
         <div style={dotStyle} />
@@ -315,6 +355,37 @@ export const render = function (props) {
                   background: 'linear-gradient(90deg, #64d2ff, #0a84ff)'
                 }} />
               </div>
+            </div>
+          ) : null}
+
+          {/* Other accounts (compact) */}
+          {otherAccounts.length > 0 ? (
+            <div style={s.acctCard}>
+              <div style={{
+                fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.4)',
+                textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6,
+              }}>Other Accounts</div>
+              {otherAccounts.map(function(a, i) {
+                var hasData = !!a.data;
+                var asp = hasData ? Math.round((a.data.five_hour||{}).utilization || 0) : null;
+                var awp = hasData ? Math.round((a.data.seven_day||{}).utilization || 0) : null;
+                return (
+                  <div key={i} style={Object.assign(
+                    {}, s.acctRow,
+                    i < otherAccounts.length - 1 ? {marginBottom: 4} : {}
+                  )}>
+                    <span style={s.acctLabel}>{a.label}</span>
+                    {hasData ? (
+                      <span>
+                        <span style={s.acctMetric}>{asp}%</span>
+                        <span style={s.acctMetricMuted}> · {awp}%</span>
+                      </span>
+                    ) : (
+                      <span style={s.acctErr}>unavailable</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : null}
 

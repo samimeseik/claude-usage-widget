@@ -10,7 +10,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 REPO = "samimeseik/claude-usage-widget"
 
 COOKIE_DB = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Cookies")
@@ -29,11 +29,43 @@ def load_config():
         return {}
 
 _cfg = load_config()
-ORG_ID = _cfg.get("org_id", "")
 CACHE = _cfg.get("cache_path", "/tmp/claude_usage_cache.json")
 
-if not ORG_ID:
-    print(json.dumps({"error": "Run install.sh first — no org_id in config.json"}))
+def _accounts_from_config(cfg):
+    """Resolve account list from config.
+
+    Supports two schemas:
+      - New: {"accounts": [{"org_id": "...", "label": "Main", "primary": true}]}
+      - Legacy: {"org_id": "..."} → single unnamed account
+    Returns list of {org_id, label, primary} dicts.
+    """
+    accounts = cfg.get("accounts")
+    if isinstance(accounts, list) and accounts:
+        out = []
+        for i, a in enumerate(accounts):
+            oid = a.get("org_id")
+            if not oid:
+                continue
+            out.append({
+                "org_id": oid,
+                "label": a.get("label") or f"Account {i + 1}",
+                "primary": bool(a.get("primary")) if i > 0 else True,
+            })
+        if out:
+            # Make sure exactly one account is primary (first by default)
+            if not any(a["primary"] for a in out):
+                out[0]["primary"] = True
+            return out
+    legacy = cfg.get("org_id")
+    if legacy:
+        return [{"org_id": legacy, "label": "Main", "primary": True}]
+    return []
+
+ACCOUNTS = _accounts_from_config(_cfg)
+ORG_ID = ACCOUNTS[0]["org_id"] if ACCOUNTS else ""
+
+if not ACCOUNTS:
+    print(json.dumps({"error": "Run install.sh first — no accounts in config.json"}))
     raise SystemExit(1)
 
 # ─── Strategy 1: curl_cffi with Chrome cookies ─────────────────────
@@ -85,7 +117,7 @@ def get_cookies():
         os.unlink(tmp.name)
     return cookies
 
-def fetch_via_cookies(retries=2):
+def fetch_via_cookies(retries=2, org_id=None):
     """Strategy 1: Direct API call using Chrome cookies + curl_cffi."""
     try:
         from curl_cffi import requests
@@ -96,11 +128,12 @@ def fetch_via_cookies(retries=2):
     if 'sessionKey' not in cookies:
         return None, "no session cookie"
 
+    target = org_id or ORG_ID
     last_err = None
     for attempt in range(retries + 1):
         try:
             resp = requests.get(
-                f"https://claude.ai/api/organizations/{ORG_ID}/usage",
+                f"https://claude.ai/api/organizations/{target}/usage",
                 cookies=cookies, impersonate="chrome", timeout=20
             )
             if resp.status_code == 200:
@@ -114,12 +147,13 @@ def fetch_via_cookies(retries=2):
 
 # ─── Strategy 2: AppleScript via browser tab (Chrome + Safari) ──────
 
-def _try_browser_tab(browser, app_check, tab_loop):
+def _try_browser_tab(browser, app_check, tab_loop, org_id=None):
     """Generic browser tab JS execution."""
+    target = org_id or ORG_ID
     js = (
         "(async()=>{"
         "try{"
-        f"const r=await fetch('https://claude.ai/api/organizations/{ORG_ID}/usage',"
+        f"const r=await fetch('https://claude.ai/api/organizations/{target}/usage',"
         "{credentials:'include'});"
         "if(!r.ok)return JSON.stringify({error:'HTTP '+r.status});"
         "return JSON.stringify(await r.json())"
@@ -148,7 +182,7 @@ def _try_browser_tab(browser, app_check, tab_loop):
         return None, str(e)[:80]
     return None, f"{browser} failed"
 
-def fetch_via_chrome_tab():
+def fetch_via_chrome_tab(org_id=None):
     """Strategy 2a: Execute JS in an open claude.ai Chrome tab."""
     tab_loop = '''
     tell application "Google Chrome"
@@ -162,9 +196,9 @@ def fetch_via_chrome_tab():
         return "{{\\"error\\":\\"No Claude tab\\"}}"
     end tell
     '''
-    return _try_browser_tab("Google Chrome", "Google Chrome", tab_loop)
+    return _try_browser_tab("Google Chrome", "Google Chrome", tab_loop, org_id)
 
-def fetch_via_safari_tab():
+def fetch_via_safari_tab(org_id=None):
     """Strategy 2b: Execute JS in an open claude.ai Safari tab."""
     tab_loop = '''
     tell application "Safari"
@@ -178,14 +212,38 @@ def fetch_via_safari_tab():
         return "{{\\"error\\":\\"No Claude tab in Safari\\"}}"
     end tell
     '''
-    return _try_browser_tab("Safari", "Safari", tab_loop)
+    return _try_browser_tab("Safari", "Safari", tab_loop, org_id)
 
-# ─── Strategy 3: Cache ──────────────────────────────────────────────
+# ─── Strategy 3: Cache (per-account) ────────────────────────────────
 
-def load_cache():
+def _account_suffix(account):
+    """Short stable suffix per account for per-account state files."""
+    if not account:
+        return ""
+    if account.get("primary"):
+        return ""  # Primary = legacy unsuffixed paths (back-compat)
+    oid = account.get("org_id", "")
+    return "_" + oid.split("-")[0]
+
+def cache_path_for(account):
+    suffix = _account_suffix(account)
+    if not suffix:
+        return CACHE
+    base, ext = os.path.splitext(CACHE)
+    return f"{base}{suffix}{ext}"
+
+def history_path_for(account):
+    suffix = _account_suffix(account)
+    if not suffix:
+        return HISTORY_FILE
+    base, ext = os.path.splitext(HISTORY_FILE)
+    return f"{base}{suffix}{ext}"
+
+def load_cache(account=None):
     """Strategy 3: Return last known good data."""
+    path = cache_path_for(account) if account else CACHE
     try:
-        with open(CACHE, 'r') as f:
+        with open(path, 'r') as f:
             cached = json.load(f)
         if "error" not in cached and cached.get("five_hour"):
             return cached
@@ -193,10 +251,11 @@ def load_cache():
         pass
     return None
 
-def save_cache(data):
+def save_cache(data, account=None):
+    path = cache_path_for(account) if account else CACHE
     data["_ts"] = datetime.now().isoformat()
     try:
-        with open(CACHE, 'w') as f:
+        with open(path, 'w') as f:
             json.dump(data, f)
     except Exception:
         pass
@@ -249,7 +308,7 @@ def send_notification(title, message, sound=True):
     except Exception:
         pass
 
-def check_and_notify(data):
+def check_and_notify(data, account=None):
     """Send notification when usage crosses thresholds (80%, 90%, 100%)."""
     thresholds = [80, 90, 100]
     alerts = []
@@ -264,6 +323,13 @@ def check_and_notify(data):
     if not alerts:
         return
 
+    # Account-scoped notification key prefix avoids cross-account suppression
+    acct_prefix = ""
+    acct_suffix_msg = ""
+    if account:
+        acct_prefix = (account.get("org_id", "")[:8] or "main") + "_"
+        acct_suffix_msg = f" [{account.get('label')}]" if account.get("label") and not account.get("primary") else ""
+
     # Load last notified state to avoid spam
     notified = {}
     try:
@@ -274,7 +340,7 @@ def check_and_notify(data):
 
     new_alerts = []
     for key, threshold, label, pct in alerts:
-        notif_key = f"{key}_{threshold}"
+        notif_key = f"{acct_prefix}{key}_{threshold}"
         last = notified.get(notif_key, 0)
         # Re-notify only if >30min since last notification for this threshold
         if time.time() - last > 1800:
@@ -284,7 +350,7 @@ def check_and_notify(data):
     if new_alerts:
         # Group into one notification
         lines = [f"{label}: {pct:.0f}%" for label, _, pct in new_alerts]
-        msg = " | ".join(lines)
+        msg = " | ".join(lines) + acct_suffix_msg
         t_max = max(t for _, t, _ in new_alerts)
         if t_max >= 100:
             send_notification("Claude Usage — Limit Reached", msg)
@@ -301,11 +367,12 @@ def check_and_notify(data):
 
 # ─── Usage History (trends) ─────────────────────────────────────────
 
-def record_history(data):
+def record_history(data, account=None):
     """Record a data point every 30 minutes for trend tracking."""
+    path = history_path_for(account) if account else HISTORY_FILE
     history = []
     try:
-        with open(HISTORY_FILE, 'r') as f:
+        with open(path, 'r') as f:
             history = json.load(f)
     except Exception:
         pass
@@ -330,15 +397,16 @@ def record_history(data):
     history = history[-96:]
 
     try:
-        with open(HISTORY_FILE, 'w') as f:
+        with open(path, 'w') as f:
             json.dump(history, f)
     except Exception:
         pass
 
-def get_trend(data):
+def get_trend(data, account=None):
     """Calculate trend arrows by comparing to last recorded value."""
+    path = history_path_for(account) if account else HISTORY_FILE
     try:
-        with open(HISTORY_FILE, 'r') as f:
+        with open(path, 'r') as f:
             history = json.load(f)
         if len(history) < 2:
             return {}
@@ -357,9 +425,10 @@ def get_trend(data):
     except Exception:
         return {}
 
-def load_history():
+def load_history(account=None):
+    path = history_path_for(account) if account else HISTORY_FILE
     try:
-        with open(HISTORY_FILE, 'r') as f:
+        with open(path, 'r') as f:
             return json.load(f)
     except Exception:
         return []
@@ -434,62 +503,102 @@ def get_code_stats():
     except Exception:
         return None
 
-def enrich(data, method):
-    """Attach trends, ETA, sparkline, code stats + update banner."""
+def enrich(data, method, account):
+    """Attach trends, ETA, sparkline + cache/history per account."""
     data["_method"] = method
-    save_cache(data)
-    check_and_notify(data)
-    record_history(data)
-    history = load_history()
-    data["_trends"] = get_trend(data)
+    save_cache(data, account)
+    check_and_notify(data, account)
+    record_history(data, account)
+    history = load_history(account)
+    data["_trends"] = get_trend(data, account)
     data["_eta"] = compute_eta(data, history)
     data["_spark"] = get_sparkline(history)
-    code = get_code_stats()
-    if code:
-        data["_code"] = code
     return data
 
-def main():
-    # Strategy 1: curl_cffi (fastest, most reliable)
-    data, err1 = fetch_via_cookies()
-    if data:
-        data = enrich(data, "cookies")
-        update = check_for_update()
-        if update:
-            data["_update"] = update
-        print(json.dumps(data))
-        return
+def fetch_for_account(account):
+    """Run the strategy stack for one account. Returns enriched data or None."""
+    org_id = account["org_id"]
 
-    # Strategy 2a: AppleScript Chrome tab
-    data, err2 = fetch_via_chrome_tab()
+    # Strategy 1: cookies
+    data, err1 = fetch_via_cookies(org_id=org_id)
     if data:
-        data = enrich(data, "chrome_tab")
-        print(json.dumps(data))
-        return
+        return enrich(data, "cookies", account), None
 
-    # Strategy 2b: AppleScript Safari tab
-    data, err3 = fetch_via_safari_tab()
+    # Strategy 2a: Chrome tab
+    data, err2 = fetch_via_chrome_tab(org_id=org_id)
     if data:
-        data = enrich(data, "safari_tab")
-        print(json.dumps(data))
-        return
+        return enrich(data, "chrome_tab", account), None
 
-    # Strategy 3: cached data
-    cached = load_cache()
+    # Strategy 2b: Safari tab
+    data, err3 = fetch_via_safari_tab(org_id=org_id)
+    if data:
+        return enrich(data, "safari_tab", account), None
+
+    # Strategy 3: stale cache
+    cached = load_cache(account)
     if cached:
         cached["_stale"] = True
         cached["_error"] = f"cookies: {err1} | chrome: {err2} | safari: {err3}"
-        history = load_history()
-        cached["_trends"] = get_trend(cached)
+        history = load_history(account)
+        cached["_trends"] = get_trend(cached, account)
         cached["_eta"] = compute_eta(cached, history)
         cached["_spark"] = get_sparkline(history)
-        print(json.dumps(cached))
+        return cached, None
+
+    return None, f"all methods failed: {err1}"
+
+def main():
+    primary_data = None
+    accounts_out = []
+    primary_error = None
+
+    for account in ACCOUNTS:
+        data, err = fetch_for_account(account)
+        if data is None:
+            # Skip dead accounts but record their error
+            accounts_out.append({
+                "label": account["label"],
+                "org_id": account["org_id"],
+                "primary": account.get("primary", False),
+                "error": err or "unknown",
+            })
+            if account.get("primary"):
+                primary_error = err
+            continue
+
+        # Strip out top-level metadata that belongs at the response root
+        # (we want it once per account in _accounts, but for primary we also
+        # promote the whole payload to the response root for back-compat).
+        accounts_out.append({
+            "label": account["label"],
+            "org_id": account["org_id"],
+            "primary": account.get("primary", False),
+            "data": data,
+        })
+        if account.get("primary"):
+            primary_data = data
+
+    # Build response: primary account at root + _accounts list
+    if primary_data:
+        out = dict(primary_data)
+        out["_accounts"] = accounts_out
+
+        # Code stats and update check are global, attach once at root
+        code = get_code_stats()
+        if code:
+            out["_code"] = code
+        update = check_for_update()
+        if update:
+            out["_update"] = update
+
+        print(json.dumps(out))
         return
 
-    # All failed
+    # Primary account failed — return error
     out = {
-        "error": f"All methods failed — {err1}",
-        "_ts": datetime.now().isoformat()
+        "error": primary_error or "All methods failed for primary account",
+        "_accounts": accounts_out,
+        "_ts": datetime.now().isoformat(),
     }
     print(json.dumps(out))
 
