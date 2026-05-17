@@ -1,43 +1,70 @@
 # Claude Usage Widget
 
-A macOS desktop widget that shows your Claude AI usage in real-time with notifications, trends, and multi-browser support.
+> The first macOS widget that shows your **claude.ai usage AND Claude Code activity** in one glance — with a real-time dollar value vs your subscription.
 
-## Two widgets, separate concerns
+<p align="center">
+  <!-- TODO: replace with real screenshot -->
+  <img src=".github/hero.png" alt="Claude Usage Widget on macOS desktop" width="800" />
+</p>
 
-The widget ships as **two separate Übersicht widgets** that share the same backend. Place them on opposite sides of the screen — neither one ever runs off-screen.
+<p align="center">
+  <a href="https://github.com/samimeseik/claude-usage-widget/releases"><img src="https://img.shields.io/github/v/release/samimeseik/claude-usage-widget" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" /></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-black?logo=apple" />
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue?logo=python&logoColor=white" />
+</p>
 
-| Widget | Position | Shows |
-|--------|----------|-------|
-| `claude-usage.jsx` | bottom-left | Usage bars (Session, Weekly, Sonnet, Extra Usage), multi-account, sparklines, ETA |
-| `claude-code.jsx` | bottom-right | Claude Code dashboard: today, 7-day projects, year heatmap, hourly distribution, agents/skills leaderboard |
+---
 
-You can enable either or both from Übersicht's menu bar icon.
+## Why this exists
+
+Every other Claude usage tracker picks a side:
+- 🌐 **claude.ai trackers** (Maciek-roboblog, lugia19) show plan limits but ignore Claude Code
+- 💻 **Claude Code trackers** (ccusage) read `.jsonl` files but ignore your claude.ai subscription
+- 📊 **Anthropic's own dashboard** is buried 4 clicks deep in settings, gives you percentages without context, and has no historical view
+
+This widget shows **both** in one glanceable view — and the killer feature: it tells you in **dollars** what you'd pay on the raw API for what you actually use. For Max plan users this answers the single most useful question: *"is $200/mo worth it?"*
+
+A typical heavy user sees something like:
+
+```
+API VALUE · 30D                  vs Max ($200/mo)
+
+$2,537                                  🎉 12.7×
+
+Saved $2,337 vs API · projected this month $2,127
+```
+
+---
 
 ## Features
 
-- **Live usage bars** — Session (5h), Weekly (7d), Sonnet with color-coded thresholds
-- **Multi-account** — Track all your Claude organizations in one widget (Personal + Work + API)
-- **Claude Code dashboard** — Today's tokens, 7-day project breakdown, year heatmap, hourly distribution, top agents/skills (reads `~/.claude/projects/*.jsonl` directly — no extra fetches)
-- **Sparkline trends** — Last 12 hours of usage drawn under each card
-- **ETA predictions** — "Reaches 100% at 8:42 PM" when burn rate is rising
-- **Absolute reset times** — "resets Thu 8 PM" instead of vague "1d 5h"
-- **Extra Usage card** — Shows pay-as-you-go credits used vs monthly limit
-- **Trend arrows** — ↑ ↓ show if usage is rising or falling vs last check
-- **macOS notifications** — Alerts at 80%, 90%, and 100% usage
-- **Multi-browser** — Chrome and Safari support
-- **Quad fallback** — Cookies → Chrome tab → Safari tab → Cache
-- **Auto-update check** — Notifies when a new version is available
+### 📊 The Usage widget (left side)
+- **Session / Weekly / Sonnet bars** with color-coded thresholds (yellow at 60%, red at 80%)
+- **Sparklines** — last 12 hours of usage drawn under each bar
+- **ETA predictions** — *"Reaches 100% at 8:42 PM"* when burn rate is rising
+- **Absolute reset times** — *"resets Thu 8 PM"* instead of vague *"1d 5h"*
+- **Extra Usage card** — pay-as-you-go credits used vs monthly limit
+- **Trend arrows** ↑ ↓ — usage rising or falling vs last check
+- **Multi-account** — Personal + Work + API orgs in one widget
 
-## Requirements
+### 💻 The Claude Code widget (right side)
+- **Today** — tokens, sessions, top tools, primary project
+- **7-day project breakdown** — see where your week's tokens went
+- **1-year heatmap** — GitHub-style contribution graph for Claude Code
+- **30-day hourly distribution** — when in the day you're most active
+- **Skills + Agents leaderboard** — top sub-agents (Explore, Plan, etc.) and skills (your most-invoked)
+- **💰 API Value card** — what your usage would cost on the API, with a multiplier vs your plan
 
-- **macOS** (Ventura or later)
-- **Google Chrome or Safari** (logged into [claude.ai](https://claude.ai))
-- **Claude Pro or Max plan** (Pro shows 2 cards, Max shows 3)
-- **Python 3.9+** (pre-installed on macOS)
+### 🔔 Plus
+- **macOS notifications** at 80%, 90%, 100%
+- **Quad fallback fetch**: Chrome cookies → Chrome tab → Safari tab → cached
+- **Auto-update check** — notifies when a new version ships
+- **Visual settings UI** — no JSON editing, browser-based control panel
 
-Optional: [Übersicht](https://tracesof.net/uebersicht/) for the desktop widget.
+---
 
-## Install
+## Install (one command)
 
 ```bash
 git clone https://github.com/samimeseik/claude-usage-widget.git
@@ -45,185 +72,134 @@ cd claude-usage-widget
 bash install.sh
 ```
 
-The installer will:
-1. Install Python dependencies (`curl_cffi`, `cryptography`)
-2. Auto-detect your Claude organization ID from Chrome
-3. Set up the widget at `~/.claude-widget/`
-4. Install the Übersicht widget (if Übersicht is installed)
+The installer:
+1. Checks prerequisites (macOS, Chrome, Python, Übersicht)
+2. Auto-detects your Claude org ID from Chrome
+3. Installs `pip` dependencies (`curl_cffi`, `cryptography`)
+4. Copies both widgets to `~/Library/Application Support/Übersicht/widgets/`
+5. Runs a verification fetch
 
-## Uninstall
+Open Übersicht's menu bar icon to toggle each widget on.
+
+### Requirements
+
+- **macOS 13+** (Ventura or later)
+- **Google Chrome or Safari** (logged into [claude.ai](https://claude.ai))
+- **Claude Pro / Max / Teams plan**
+- **Python 3.9+** (pre-installed on macOS)
+- **[Übersicht](https://tracesof.net/uebersicht/)** (free)
+
+---
+
+## Customize without editing code
+
+Launch the visual settings UI:
 
 ```bash
-bash uninstall.sh
+python3 ~/.claude-widget/configure.py
 ```
 
-## Usage Modes
+Or double-click `~/.claude-widget/configure.command` from Finder.
 
-### Desktop Widget (Übersicht)
-Automatically active if Übersicht is installed. Floating widget refreshes every 2 minutes.
+A page opens at `http://localhost:7777/` where you can:
+- Enable / disable each widget
+- Pick any of the 4 corner anchors (top-left, top-right, bottom-left, bottom-right)
+- Adjust offset X/Y and width via sliders
+- Toggle individual sections (heatmap, leaderboard, etc.)
 
-### Standalone Widget (tkinter)
-```bash
-python3 ~/.claude-widget/claude_usage_widget.py
-```
-Draggable floating window. Double-click to refresh, right-click to close.
+Save → widgets refresh within ~1 second.
 
-## How It Works
+<p align="center">
+  <!-- TODO: replace with real settings UI screenshot -->
+  <img src=".github/settings.png" alt="Visual settings UI" width="600" />
+</p>
 
-The widget fetches usage data via a quad-fallback strategy:
-
-1. **Chrome Cookies** — Reads session from Chrome's cookie DB (fastest, no browser needed)
-2. **Chrome Tab** — Executes JS in an open claude.ai Chrome tab
-3. **Safari Tab** — Executes JS in an open claude.ai Safari tab
-4. **Cache** — Returns last known good data with a "stale" indicator
-
-No API keys needed. No passwords stored. Uses your existing browser session.
-
-## Notifications
-
-macOS notifications fire when usage crosses thresholds:
-
-| Threshold | Notification |
-|-----------|-------------|
-| 80%+ | "Claude Usage — High Usage" |
-| 90%+ | "Claude Usage — Almost Full" |
-| 100% | "Claude Usage — Limit Reached" |
-
-Notifications are rate-limited to once per 30 minutes per threshold.
-
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| "No session cookie" | Log into claude.ai in Chrome or Safari |
-| "Run install.sh first" | Run `bash install.sh` |
-| Orange dot | Data is cached/stale — will refresh next cycle |
-| Red dot | All fetch methods failed — open a browser with claude.ai |
+---
 
 ## Multi-account
 
-If you have multiple Claude organizations (e.g. Personal + Work + an API/eval org), the widget can track them all. The primary account gets the full usage bars; others appear as a compact summary row.
-
-### Auto-discover accounts
-
-```bash
-python3 ~/.claude-widget/discover_accounts.py
-```
-
-This lists every org accessible from your Chrome session and prints a ready-to-paste config. To save it directly:
+If you have multiple Claude organizations (Personal + Work + API/eval), the widget tracks them all:
 
 ```bash
 python3 ~/.claude-widget/discover_accounts.py --save
 ```
 
-### Multi-account config
+The script lists every org accessible from your Chrome session and writes a ready-to-go multi-account config. Primary account gets full usage bars; others appear as a compact summary row.
 
-```json
-{
-    "accounts": [
-        {"org_id": "uuid-1", "label": "Personal", "primary": true},
-        {"org_id": "uuid-2", "label": "Work"}
-    ],
-    "cache_path": "/tmp/claude_usage_cache.json"
-}
+---
+
+## How it works
+
+```
+┌───────────────────────────────────────────────────────┐
+│   fetch_usage.py (every 2 min, via Übersicht)         │
+│                                                       │
+│   1. Cookie + curl_cffi  →  claude.ai/api/.../usage   │
+│   2. Chrome tab JS       (fallback)                   │
+│   3. Safari tab JS       (fallback)                   │
+│   4. Cache               (last-known-good)            │
+│                                                       │
+│   + code_stats.py walks ~/.claude/projects/*.jsonl    │
+│     for Claude Code stats (today, 7d, year, hourly)   │
+└───────────────────────────────────────────────────────┘
+                          │
+              ┌───────────┴───────────┐
+              ▼                       ▼
+        claude-usage.jsx        claude-code.jsx
+        (left widget)           (right widget)
 ```
 
-Notes:
-- Exactly one account should be marked `primary: true`. If none is marked, the first becomes primary.
-- Each account has its own cache + history files (no cross-contamination).
-- Accounts that don't expose `/usage` (e.g. some API-only orgs return 403) show as "unavailable" instead of breaking the widget.
+- **Cookie extraction**: reads Chrome's encrypted cookie store via macOS Keychain, decrypts with PBKDF2-derived AES key, bypasses Cloudflare with `curl_cffi`'s Chrome-impersonation TLS fingerprint
+- **No browser required**: cookies work standalone; Chrome doesn't even need to be open
+- **No data leaves your machine**: all fetches go directly to claude.ai with your own session
+- **Caches everything**: heatmap (1h), hourly (1h), leaderboard (1h), cost (1h), main usage (2 min)
 
-## Customizing widgets — position, size, sections
+---
 
-Both widgets are fully configurable from `~/.claude-widget/config.json`. Edit the `widgets` block to change where each one sits, how wide it is, and which sections it shows.
+## Troubleshooting
 
-### Full config reference
+| Issue | Fix |
+|-------|-----|
+| "No session cookie" | Log into claude.ai in Chrome or Safari once |
+| "Run install.sh first" | Run `bash install.sh` |
+| Position changes don't apply | Quit + relaunch Übersicht once after upgrade |
+| Orange dot in widget header | Data is cached — will refresh next cycle |
+| Red dot in widget header | All fetch methods failed — open a browser with claude.ai |
+| 403 for an API/eval org | That org doesn't expose `/usage` — widget shows "unavailable" gracefully |
 
-```json
-{
-    "accounts": [...],
-    "cache_path": "/tmp/claude_usage_cache.json",
-    "widgets": {
-        "usage": {
-            "enabled": true,
-            "anchor":  {"vertical": "bottom", "horizontal": "left"},
-            "offset":  {"x": 24, "y": 24},
-            "width":   280,
-            "show":    ["session", "weekly", "sonnet", "extra", "other_accounts", "code_summary"]
-        },
-        "code": {
-            "enabled": true,
-            "anchor":  {"vertical": "bottom", "horizontal": "right"},
-            "offset":  {"x": 24, "y": 24},
-            "width":   300,
-            "show":    ["today", "projects_7d", "heatmap", "hourly", "leaderboard"]
-        }
-    }
-}
-```
+---
 
-| Field | Values | Effect |
-|-------|--------|--------|
-| `enabled` | `true` / `false` | Render the widget at all |
-| `anchor.vertical` | `"top"` / `"bottom"` | Pin to top or bottom of screen |
-| `anchor.horizontal` | `"left"` / `"right"` | Pin to left or right edge |
-| `offset.x` | pixels | Distance from horizontal edge |
-| `offset.y` | pixels | Distance from vertical edge |
-| `width` | pixels | Widget width |
-| `show` | array of section names | Which sections render (and order doesn't matter — sections render in their natural order) |
+## Roadmap
 
-### Section names
+- [ ] Calendar heatmap as standalone widget for r/dataisbeautiful screenshots
+- [ ] Streak tracker ("12-day Claude Code streak")
+- [ ] Per-project drilldown view in browser
+- [ ] Export 1-year history as CSV
+- [ ] Homebrew formula (`brew install claude-usage-widget`)
 
-**`usage` widget** — `"session"`, `"weekly"`, `"sonnet"`, `"extra"`, `"other_accounts"`, `"code_summary"`
+Open an issue if there's something you want to see.
 
-**`code` widget** — `"today"`, `"projects_7d"`, `"heatmap"`, `"hourly"`, `"leaderboard"`
+---
 
-To **hide** a section, just remove its name from the `show` array. To **enable only what you need** (e.g. minimal mode showing only the session bar):
+## Privacy
 
-```json
-"usage": {
-    "show": ["session"]
-}
-```
+This widget never sends data anywhere except claude.ai itself (using your own session). All processing, caching, and history happens in `~/.claude-widget/` on your Mac.
 
-### Common layouts
+- No analytics
+- No telemetry
+- No external services
+- No accounts to create
+- Reads only: Chrome cookie store, `~/.claude/projects/*.jsonl`, claude.ai API
+- Writes only: `~/.claude-widget/` and `/tmp/claude_usage_cache.json`
 
-**Minimal**: just the session % in the top-right corner
-```json
-"usage": {
-    "anchor": {"vertical": "top", "horizontal": "right"},
-    "offset": {"x": 16, "y": 60},
-    "width": 220,
-    "show": ["session"]
-}
-```
-
-**Compact dashboard**: usage bars top-left, no Claude Code dashboard
-```json
-"usage": {"anchor": {"vertical": "top", "horizontal": "left"}, "offset": {"x": 24, "y": 60}},
-"code":  {"enabled": false}
-```
-
-**Heatmap-only on the right**: just the year activity graph
-```json
-"code": {
-    "anchor": {"vertical": "bottom", "horizontal": "right"},
-    "show": ["today", "heatmap"]
-}
-```
-
-**Apply changes:** edit `config.json`, save, wait ≤2 minutes for the next refresh (or open Übersicht and click "Refresh All Widgets").
-
-## Config
-
-Single-account config (created by `install.sh`):
-```json
-{
-    "org_id": "your-org-uuid",
-    "cache_path": "/tmp/claude_usage_cache.json"
-}
-```
+---
 
 ## License
 
-MIT
+MIT — do whatever you want.
+
+---
+
+## Credits
+
+Built with [Übersicht](https://tracesof.net/uebersicht/), `curl_cffi`, and `cryptography`. Inspired by [ccusage](https://github.com/ryoppippi/ccusage) (the leading Claude Code tracker) and [Maciek-roboblog's claude-usage](https://github.com/Maciek-roboblog/claude-usage) — combining the best of both worlds.
